@@ -121,14 +121,14 @@ int main(int argc, char *argv[]) {
 				} else {
 					erl_send(fd, from, erl_format("{error, ~s}", "cannot create JS context"));
 				}	
+				JS_DestroyContext(context);			
   			} else {
 				erl_send(fd, from, erl_format("{error, ~s}", "cannot create JS runtime"));
 			}
+    		JS_DestroyRuntime(runtime);
     	}
 		erl_free_term(from); 
 		erl_free_compound(ast);	   	
-		JS_DestroyContext(context);
-		JS_DestroyRuntime(runtime);	
 		erl_free_term(emsg.from); 
 		erl_free_term(emsg.msg);
   	}
