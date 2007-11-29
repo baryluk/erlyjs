@@ -2,7 +2,7 @@
 %%% @author     Roberto Saccon <rsaccon@gmail.com> [http://rsaccon.com]
 %%% @copyright  2007 Roberto Saccon
 %%% @doc        Helper module for easy application start, stop, reloading , etc.
-%%% @reference  See <a href="http://erlycomet.googlecode.com" target="_top">http://erlycomet.googlecode.com</a> for more information
+%%% @reference  See <a href="http://erlyjs.googlecode.com" target="_top">http://erlyjs.googlecode.com</a> for more information
 %%% @end
 %%%
 %%%
@@ -32,7 +32,7 @@
 -module(erlyjs).
 -author('rsaccon@gmail.com').
 
--export([start/0, demo/0, demo/1, ast/1]).
+-export([start/0, test/0, test/1, ast/1]).
  
 -define(C_NODE_NUMBER, 2).  %% TODO add gen_server to handle State such as C-Node-Number
 
@@ -133,12 +133,12 @@ start() ->
    spawn(fun() -> loop(Port) end). 
 
 
-demo() ->
+test() ->
     Dir = filename:join([filename:dirname(code:which(?MODULE)),"..", "demo"]),
     demo(filename:join([Dir, "test.js"])).
 
  
-demo(File) ->   
+test(File) ->   
 	case file:read_file(File) of
         {ok, B} ->
 			ErlAst = transl(ast(B)),
