@@ -1,7 +1,7 @@
 %%%---------------------------------------------------------------------------------------
 %%% @author     Roberto Saccon <rsaccon@gmail.com> [http://rsaccon.com]
 %%% @copyright  2007 Roberto Saccon
-%%% @doc        Helper module for easy application start, stop, reloading , etc.
+%%% @doc        Javascript to Erlang compiler
 %%% @reference  See <a href="http://erlyjs.googlecode.com" target="_top">http://erlyjs.googlecode.com</a> for more information
 %%% @end
 %%%
@@ -29,13 +29,7 @@
 %%% THE SOFTWARE.
 %%%
 %%%---------------------------------------------------------------------------------------
--module(erlyjs).
--author('rsaccon@gmail.com').
-
--export([start/0, test/0, test/1, ast/1]).
- 
--define(C_NODE_NUMBER, 2).  %% TODO add gen_server to handle State such as C-Node-Number
-
+%%
 %% EOF = 0,                        /* end of file */
 %% EOL = 1,                        /* end of line */
 %% SEMI = 2,                       /* semicolon */
@@ -118,72 +112,184 @@
 %%                                    destructuring formal parameters */
 %% RESERVED,                       /* reserved keyword */
 %% LIMIT                           /* domain size */
+%%----------------------------------------------------------------------------------------
+-module(erlyjs).
+-author('rsaccon@gmail.com').
 
+-behaviour(gen_server).
 
-%%=====================================================================
-%%  API Functions
-%%=====================================================================
+-define(DEFAULT_CNODE_NUMBER, 2).
+-define(TIMEOUT, 1000).
+
+-export([start_link/0, start_link/1, stop/0, ast/1, transl/1]).
 	
-start() ->
-   CNodeBinPath = filename:join([filename:dirname(code:which(?MODULE)),"..", "priv", "bin", "erlyjs"]),
-   Number = integer_to_list(?C_NODE_NUMBER),
-   Cookie = atom_to_list(erlang:get_cookie()),
-   Node = atom_to_list(node()),
-   Port = open_port({spawn, CNodeBinPath ++ " " ++ Number ++ " " ++ Cookie ++ " " ++ Node}, []),
-   spawn(fun() -> loop(Port) end). 
+%% gen_server callbacks
+-export([init/1, handle_call/3, handle_cast/2, handle_info/2,
+         terminate/2, code_change/3]).
 
+-record(state, {cnode,
+                port}).
 
-test() ->
-    Dir = filename:join([filename:dirname(code:which(?MODULE)),"..", "demo"]),
-    demo(filename:join([Dir, "test.js"])).
+%%====================================================================
+%% API
+%%====================================================================
+%%--------------------------------------------------------------------
+%% @spec () -> {ok,Pid} | ignore | {error,Error}
+%% @doc 
+%% Starts the server
+%% @end 
+%%--------------------------------------------------------------------
+start_link() ->
+    gen_server:start_link({local, ?MODULE}, ?MODULE, ?DEFAULT_CNODE_NUMBER, []).
+    
+    
+%%--------------------------------------------------------------------
+%% @spec (CNodeNumber::integer()) -> {ok,Pid} | ignore | {error,Error}
+%% @doc 
+%% Starts the server
+%% @end 
+%%--------------------------------------------------------------------
+start_link(CNodeNumber) ->
+    gen_server:start_link({local, ?MODULE}, ?MODULE, CNodeNumber, []).
+  
+  
+%%--------------------------------------------------------------------
+%% @spec () -> any()
+%% @doc 
+%% Stops the server
+%% @end 
+%%--------------------------------------------------------------------  
+stop() ->
+    gen_server:call(?MODULE, stop).
+     
+            
+%%--------------------------------------------------------------------
+%% @spec (Source::binary()) ->
+%%     (ok | {error, Reason})
+%% @doc
+%% Creates a blank image.
+%% @end 
+%%--------------------------------------------------------------------
+ast(Binary) ->
+    gen_server:call(?MODULE, {list_to_atom(binary_to_list(Binary))}).	
 
- 
-test(File) ->   
-	case file:read_file(File) of
-        {ok, B} ->
-			ErlAst = transl(ast(B)),
-			    io:format("TRACE ~p:~p Erlang AST:~n ~p~n",[?MODULE, ?LINE, ErlAst]),
-				ErlAst;
-		_ ->
-		    io:format("TRACE ~p:~p reading js sourcefile failed~n",[?MODULE, ?LINE])
-	end.
-
- 
-ast(B) ->
-   call_cnode({list_to_atom(binary_to_list(B))}).
-
-
-%% ============================================
-%% Internal functions
-%% ============================================
-
-loop(Port) ->
-   receive
-     Anything ->
-       io:format("Received from jserl: ~p~n", [Anything]),
-       loop(Port)
-   end.
-
-
-call_cnode(Msg) ->
-    Hostname = string:strip(os:cmd("hostname -s"), right, $\n),
-    Nodename = "c" ++ integer_to_list(?C_NODE_NUMBER) ++ "@" ++ Hostname,
-    {any, list_to_atom(Nodename)} ! {call, self(), Msg},
-    receive
-		Result ->
-	    	Result
-    end.
-
-
+    
+%%--------------------------------------------------------------------
+%% @spec (tuple()) -> tuple()
+%% @doc
+%% translates JS AST to Erlang AST
+%% @end 
+%%--------------------------------------------------------------------
 transl({error, Reason}) ->
     io:format("TRACE ~p:~p Error: ~p~n",[?MODULE, ?LINE, Reason]);
-	
+
 transl({{'LC', _Loc}, List}) ->
 	[transl(X) || X <- lists:reverse(List)];
 
 transl({{'NAME', _Loc}, Val}) -> 
 	{var, 1, Val};
-				
+
 transl(Other) ->
     io:format("TRACE ~p:~p Other: ~p~n",[?MODULE, ?LINE, Other]),
 	Other.
+
+    
+%%====================================================================
+%% gen_server callbacks
+%%====================================================================
+
+%%--------------------------------------------------------------------
+%% @spec init(Args) -> {ok, State} |
+%%                     {ok, State, Timeout} |
+%%                     ignore               |
+%%                     {stop, Reason}
+%% @doc Initiates the server
+%% @end 
+%%--------------------------------------------------------------------  
+init(CNodeNumber) ->  
+    CNodeBinPath = filename:join([filename:dirname(code:which(?MODULE)),"..", "priv", "bin", "erlyjs"]),
+    Cookie = atom_to_list(erlang:get_cookie()),
+    Node = atom_to_list(node()),
+    Cmd = lists:concat([CNodeBinPath, " ", CNodeNumber, " ", Cookie, " ", Node]),
+    Port = open_port({spawn, Cmd}, []),   
+    HostName = string:strip(os:cmd("hostname -s"), right, $\n),
+    CNodeName = lists:concat(["c", CNodeNumber, "@", HostName]),
+    {ok, #state{cnode = list_to_atom(CNodeName), port=Port}}.
+
+%%--------------------------------------------------------------------
+%% @spec 
+%% handle_call(Request, From, State) -> {reply, Reply, State} |
+%%                                      {reply, Reply, State, Timeout} |
+%%                                      {noreply, State} |
+%%                                      {noreply, State, Timeout} |
+%%                                      {stop, Reason, Reply, State} |
+%%                                      {stop, Reason, State}
+%% @doc Handling call messages
+%% @end 
+%%--------------------------------------------------------------------
+handle_call(stop, _From, State) ->
+    call_cnode(State#state.cnode, {stop, {}}),
+    {stop, normal, State};
+
+handle_call(Msg, _From, State) ->
+    Reply = call_cnode(State#state.cnode, Msg),
+    {reply, Reply, State}.
+
+%%--------------------------------------------------------------------
+%% @spec handle_cast(Msg, State) -> {noreply, State} |
+%%                                  {noreply, State, Timeout} |
+%%                                  {stop, Reason, State}
+%% @doc Handling cast messages
+%% @end 
+%%--------------------------------------------------------------------
+handle_cast(_Msg, State) ->
+    {noreply, State}.
+
+%%--------------------------------------------------------------------
+%% @spec handle_info(Info, State) -> {noreply, State} |
+%%                                   {noreply, State, Timeout} |
+%%                                   {stop, Reason, State}
+%% @doc Handling all non call/cast messages
+%% @end 
+%%--------------------------------------------------------------------
+handle_info(_Info, State) ->
+    {noreply, State}.
+
+%%--------------------------------------------------------------------
+%% @spec terminate(Reason, State) -> void()
+%% @doc This function is called by a gen_server when it is about to
+%% terminate. It should be the opposite of Module:init/1 and do any necessary
+%% cleaning up. When it returns, the gen_server terminates with Reason.
+%% The return value is ignored.
+%% @end 
+%%--------------------------------------------------------------------
+terminate(_Reason, _State) ->
+    io:format("TRACE ~p:~p ~p~n",[?MODULE, ?LINE, "terminate"]),
+    ok.
+
+%%--------------------------------------------------------------------
+%% @spec code_change(OldVsn, State, Extra) -> {ok, NewState}
+%% @doc Convert process state when code is changed
+%% @end 
+%%--------------------------------------------------------------------
+code_change(_OldVsn, State, _Extra) ->
+    {ok, State}.
+
+
+%%--------------------------------------------------------------------
+%%% Internal functions
+%%--------------------------------------------------------------------
+
+call_cnode(CNode, Msg) ->
+    {any, CNode} ! {call, self(), Msg},
+    receive
+        %% TODO: receive only from our CNode with specific CNodeNumber
+        %% {cnode, CNodeNumber, Result} ->
+        %%     Result
+        Result ->
+            Result        
+    after 
+        ?TIMEOUT ->
+            %% TODO: proper errorlogging
+            {error, timeout}
+    end.    

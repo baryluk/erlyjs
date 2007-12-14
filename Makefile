@@ -1,7 +1,7 @@
 ERL=/Users/rsaccon/R11B/start.sh
 #ERL=/usr/local/erlware/bin/erl
 #ERL=erl
-APP_NAME=erlyjs
+APP_NAME=erlyjs_demo
 NODE_NAME=erlyjs
 
 all:
