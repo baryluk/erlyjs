@@ -46,13 +46,13 @@ int main(int argc, char *argv[]) {
  	int fd;                           /* fd to Erlang node */
   	unsigned char buf[BUFSIZE];       /* Buffer for incoming message */
   	ErlMessage emsg;                  /* Incoming message */
-  	int number;                       /* C-Node number */
+  	int c_node;                       /* C-Node number */
   	char *cookie;                     /* Shared cookie */
   	short creation;                   /* ?? */
   	char *erlang_node;                /* Erlang node to connect to */
   	ETERM *from, *args, *arg1, *ast;
   	int received, status, loop = 1;  
-	number = atoi(argv[1]);
+	c_node = atoi(argv[1]);
 	cookie = argv[2];
 	creation = 0;
 	erlang_node = argv[3];
@@ -67,13 +67,11 @@ int main(int argc, char *argv[]) {
 
   	erl_init(NULL, 0);
 
-  	if (!erl_connect_init(number, cookie, creation))
+  	if (!erl_connect_init(c_node, cookie, creation))
     	erl_err_quit("erl_connect_init");
 
   	if ((fd = erl_connect(erlang_node)) < 0)
-    	erl_err_quit("erl_connect");
-
-  	fprintf(stderr, "erlyjs (c-node %d) started. \n\r", number);  
+    	erl_err_quit("erl_connect");  
     
   	while (loop) {
     	received = erl_receive_msg(fd, buf, BUFSIZE, &emsg);
@@ -102,28 +100,28 @@ int main(int argc, char *argv[]) {
 				  				if (node) {
 									ast = traverse(node, context); 
 									if (ast) {
-										erl_send(fd, from, ast);
+										erl_send(fd, from, erl_format("{c_node, ~i, ~w}", c_node, ast));            ;
 									} else {
-										erl_send(fd, from, erl_format("{error, ~s}", "AST traversal error"));
+										erl_send(fd, from, erl_format("{c_node, ~i, {error, ~s}}", c_node, "AST traversal error"));
 									}
 							 	} else {
-									erl_send(fd, from, erl_format("{error, ~s}", "parse error in file"));	
+									erl_send(fd, from, erl_format("{c_node, ~i, {error, ~s}}", c_node, "parse error in file"));	
 								}																															
 							} else {
-								erl_send(fd, from, erl_format("{error, ~s}", "cannot create token stream from"));
+								erl_send(fd, from, erl_format("{c_node, ~i, {error, ~s}}", c_node, "cannot create token stream from"));
 							}  								
 						} else {
-							erl_send(fd, from, erl_format("{error, ~s}", "cannot initialize standard classes"));
+							erl_send(fd, from, erl_format("{c_node, ~i, {error, ~s}}", c_node, "cannot initialize standard classes"));
 						}									
 					} else {
-						erl_send(fd, from, erl_format("{error, ~s}", "cannot create JS global object"));
+						erl_send(fd, from, erl_format("{c_node, ~i, {error, ~s}}", c_node, "cannot create JS global object"));
 					}								
 				} else {
-					erl_send(fd, from, erl_format("{error, ~s}", "cannot create JS context"));
+					erl_send(fd, from, erl_format("{c_node, ~i, {error, ~s}}", c_node, "cannot create JS context"));
 				}	
 				JS_DestroyContext(context);			
   			} else {
-				erl_send(fd, from, erl_format("{error, ~s}", "cannot create JS runtime"));
+				erl_send(fd, from, erl_format("{c_node, ~i, {error, ~s}}", c_node, "cannot create JS runtime"));
 			}
     		JS_DestroyRuntime(runtime);
     	}
@@ -131,8 +129,7 @@ int main(int argc, char *argv[]) {
 		erl_free_compound(ast);	   	
 		erl_free_term(emsg.from); 
 		erl_free_term(emsg.msg);
-  	}
-  	fprintf(stderr, "erlyjs loop exit\n\r"); 
+  	} 
   	exit(EXIT_SUCCESS);
 }
 

@@ -17,6 +17,7 @@ ifeq ($(PLATFORM_UNAME), Darwin)
 	LIBDIRS=-L/usr/lib -L$(SPIDERMONKEY_DIR)/Darwin_DBG.OBJ -L$(ERL_INTERFACE)/darwin-x86/lib
 else
   ifeq ($(PLATFORM_UNAME), Linux)
+    # todo: everything for Linux
     OTP=/opt/cean
     ERL_INTERFACE=$(OTP)/erlang/lib/erl_interface-3.5.5.3
     COMPILER=gcc
