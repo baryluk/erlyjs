@@ -226,7 +226,6 @@ body_ast({{'ASSIGN', _}, {{'NAME', _}, Name}, Right}, #js_context{scope=global}=
     {AstInner,Info} = body_ast(Right, Context#js_context{scope=local}),
     Ast = erl_syntax:application(erl_syntax:atom(erlyjs_server), 
         erl_syntax:atom(set_var), [erl_syntax:atom(Name), AstInner]),
-    
     {[], #ast_info{global_asts = [Ast]}};
     
 body_ast({{'ASSIGN', _}, {{'NAME', _}, Name}, Right}, Context) ->
