@@ -43,7 +43,11 @@
 -export([start_link/0, 
     start_link/1,
     stop/0,
-    compile/1]).
+    compile/2,
+    compile/3,
+    compile/4,
+    set_var/2,
+    get_var/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -83,20 +87,36 @@ start_link(CNodeNumber) ->
 stop() ->
     gen_server:call(?MODULE, stop).
      
-            
+
+compile(Bin, Mod) when is_binary(Bin) ->
+    compile(Bin, Mod, "run").
+  
+compile(Bin, Mod, [$f, $u, $n, $c, $_ | _]) when is_binary(Bin) ->
+    {error, "'func_' not allowed in global function name"};   
+    
+compile(Bin, Mod, Func) when is_binary(Bin) ->
+    compile(Bin, Mod, Func, "ebin").    
+                
 %%--------------------------------------------------------------------
 %% @spec (JsFile::binray()) -> (ok | {error, Reason})
 %% @doc
 %% compiles a Javascript document.
 %% @end 
 %%--------------------------------------------------------------------
-compile(Bin) when is_binary(Bin) ->
+compile(Bin, Mod, Func, OutDir) when is_binary(Bin) ->
     case gen_server:call(?MODULE, {list_to_atom(binary_to_list(Bin))}) of
         {ok, Val} ->
-            erlyjs_translator:body_ast(Val);
+            io:format("TRACE ~p:~p ~p~n",[?MODULE, ?LINE, Val]),
+            erlyjs_compiler:compile(Val, Mod, Func, OutDir);
         Err ->
             Err
-    end.        
+    end.
+    
+set_var(_Name, _Val) ->
+    ok.      
+    
+get_var(_Name) ->
+    unefined.
         
 %%====================================================================
 %% gen_server callbacks

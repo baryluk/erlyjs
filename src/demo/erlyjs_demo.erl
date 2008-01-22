@@ -57,10 +57,10 @@ test() ->
 test(File) ->   
 	case file:read_file(File) of
         {ok, Bin} ->
-            ErlAst = erlyjs_server:compile(Bin),
-            io:format("TRACE ~p:~p Erlang AST:~n ~p~n",[?MODULE, ?LINE, ErlAst]);
-		_ ->
-		    io:format("TRACE ~p:~p reading js sourcefile failed~n",[?MODULE, ?LINE])
+            Module = filename:rootname(filename:basename(File)),
+            erlyjs_server:compile(Bin, Module);
+		Err ->
+		    io:format("TRACE ~p:~p reading js sourcefile failed ~p~n",[?MODULE, ?LINE, Err])
 	end.
 	
 %%====================================================================
