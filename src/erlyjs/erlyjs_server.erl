@@ -91,11 +91,18 @@ stop() ->
 compile(Bin, Mod) when is_binary(Bin) ->
     compile(Bin, Mod, "run").
   
-compile(Bin, Mod, [$f, $u, $n, $c, $_ | _]) when is_binary(Bin) ->
+compile(Bin, _, [$f, $u, $n, $c, $_ | _]) when is_binary(Bin) ->
     {error, "'func_' not allowed in global function name"};   
     
 compile(Bin, Mod, Func) when is_binary(Bin) ->
     compile(Bin, Mod, Func, "ebin").    
+ 
+    
+set_var(_, _) ->
+    ok.
+    
+get_var(_) ->
+    ok.    
                 
 %%--------------------------------------------------------------------
 %% @spec (JsFile::binray()) -> (ok | {error, Reason})
@@ -104,19 +111,14 @@ compile(Bin, Mod, Func) when is_binary(Bin) ->
 %% @end 
 %%--------------------------------------------------------------------
 compile(Bin, Mod, Func, OutDir) when is_binary(Bin) ->
-    case gen_server:call(?MODULE, {list_to_atom(binary_to_list(Bin))}) of
+    case gen_server:call(?MODULE, {c_node, {list_to_atom(binary_to_list(Bin))}}) of
         {ok, Val} ->
             io:format("TRACE ~p:~p ~p~n",[?MODULE, ?LINE, Val]),
             erlyjs_compiler:compile(Val, Mod, Func, OutDir);
         Err ->
             Err
     end.
-    
-set_var(_Name, _Val) ->
-    ok.      
-    
-get_var(_Name) ->
-    unefined.
+        
         
 %%====================================================================
 %% gen_server callbacks
@@ -155,9 +157,10 @@ handle_call(stop, _From, State) ->
     call_cnode(State#state.cnode, State#state.cnode_number, {stop, {}}),
     {stop, normal, State};
     
-handle_call(Msg, _From, State) ->
+handle_call({c_node, Msg}, _From, State) ->
     Reply = call_cnode(State#state.cnode, State#state.cnode_number, Msg),
     {reply, Reply, State}.
+ 
 
 %%--------------------------------------------------------------------
 %% @spec handle_cast(Msg, State) -> {noreply, State} |

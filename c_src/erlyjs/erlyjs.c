@@ -223,12 +223,23 @@ ETERM * traverse(JSParseNode * root, JSContext * context) {
 				free(params);	
 				ast1 = traverse(root->pn_body, context);					
 				ast = erl_format("{~w, ~a, ~w, ~w}", type, cstr, list, ast1);
-				
+								
 				break;
-	  		case PN_NAME:			
-				string = ATOM_TO_STRING(root->pn_atom);
-				cstr = JS_GetStringBytes(string);
-				ast = erl_format("{~w, ~a}", type, cstr);
+	  		case PN_NAME:
+    		    if (TOKENS[root->pn_type] == "NAME") {
+    		        string = ATOM_TO_STRING(root->pn_atom);
+    				cstr = JS_GetStringBytes(string);			
+    				ast = erl_format("{~w, ~a, ~i, ~i}", type, cstr, root->pn_attrs, root->pn_slot);    				
+    		    } else if (TOKENS[root->pn_type] == "DOT") {
+    		        ast1 = traverse(root->pn_expr, context);
+    		        string = ATOM_TO_STRING(root->pn_atom);
+    				cstr = JS_GetStringBytes(string);			
+    				ast = erl_format("{~w, ~a, ~w}", type, cstr, ast1);
+    		    } else {    		            		        
+				    string = ATOM_TO_STRING(root->pn_atom);
+				    cstr = JS_GetStringBytes(string);
+				    ast = erl_format("{~w, ~a}", type, cstr);     
+				}
 				break;
 	  		case PN_NULLARY:
 				if (TOKENS[root->pn_type] == "NUMBER") {
