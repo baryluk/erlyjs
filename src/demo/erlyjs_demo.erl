@@ -55,13 +55,8 @@ test() ->
 %% @end 
 %%--------------------------------------------------------------------
 test(File) ->   
-	case file:read_file(File) of
-        {ok, Bin} ->
-            Module = filename:rootname(filename:basename(File)),
-            erlyjs_server:compile(Bin, Module);
-		Err ->
-		    io:format("TRACE ~p:~p reading js sourcefile failed ~p~n",[?MODULE, ?LINE, Err])
-	end.
+	Module = filename:rootname(filename:basename(File)),
+    erlyjs_compiler:compile(File, Module).
 	
 %%====================================================================
 %% Internal functions

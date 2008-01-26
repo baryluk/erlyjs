@@ -1,17 +1,12 @@
-var alpha, y, str;
+var alpha;
+var y;
+varstr;
 str = "hi";
 alpha = 1;
-
-function plus_first(a, b) {
-	var q;
-	console.log("hello world");
-	q = 1;
-	q = 2;
-	return q;
+y = alpha * 2;
+function first(a, b) {
+	var a = 1;
 }
-
-function plus_second(c, d) {
-	// var r, o, p, q;
-	// q = {"a":4, "b":false};
-	return 5;
+var mm = function(r, g) {
+	alpha = 33;
 }

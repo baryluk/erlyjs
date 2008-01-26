@@ -31,92 +31,8 @@
 -module(erlyjs_compiler).
 -author('rsaccon@gmail.com').
 
--export([compile/4]).
+-export([compile/2, compile/3, compile/4]).
 
-%%----------------------------------------------------------------------------------------
-%% EOF = 0,                        /* end of file */
-%% EOL = 1,                        /* end of line */
-%% SEMI = 2,                       /* semicolon */
-%% COMMA = 3,                      /* comma operator */
-%% ASSIGN = 4,                     /* assignment ops (= += -= etc.) */
-%% HOOK = 5, COLON = 6,            /* conditional (?:) */
-%% OR = 7,                         /* logical or (||) */
-%% AND = 8,                        /* logical and (&&) */
-%% BITOR = 9,                      /* bitwise-or (|) */
-%% BITXOR = 10,                    /* bitwise-xor (^) */
-%% BITAND = 11,                    /* bitwise-and (&) */
-%% EQOP = 12,                      /* equality ops (== !=) */
-%% RELOP = 13,                     /* relational ops (< <= > >=) */
-%% SHOP = 14,                      /* shift ops (<< >> >>>) */
-%% PLUS = 15,                      /* plus */
-%% MINUS = 16,                     /* minus */
-%% STAR = 17, DIVOP = 18,          /* multiply/divide ops (* / %) */
-%% UNARYOP = 19,                   /* unary prefix operator */
-%% INC = 20, DEC = 21,             /* increment/decrement (++ --) */
-%% DOT = 22,                       /* member operator (.) */
-%% LB = 23, RB = 24,               /* left and right brackets */
-%% LC = 25, RC = 26,               /* left and right curlies (braces) */
-%% LP = 27, RP = 28,               /* left and right parentheses */
-%% NAME = 29,                      /* identifier */
-%% NUMBER = 30,                    /* numeric constant */
-%% STRING = 31,                    /* string constant */
-%% REGEXP = 32,                    /* RegExp constant */
-%% PRIMARY = 33,                   /* true, false, null, this, super */
-%% FUNCTION = 34,                  /* function keyword */
-%% EXPORT = 35,                    /* export keyword */
-%% IMPORT = 36,                    /* import keyword */
-%% IF = 37,                        /* if keyword */
-%% ELSE = 38,                      /* else keyword */
-%% SWITCH = 39,                    /* switch keyword */
-%% CASE = 40,                      /* case keyword */
-%% DEFAULT = 41,                   /* default keyword */
-%% WHILE = 42,                     /* while keyword */
-%% DO = 43,                        /* do keyword */
-%% FOR = 44,                       /* for keyword */
-%% BREAK = 45,                     /* break keyword */
-%% CONTINUE = 46,                  /* continue keyword */
-%% IN = 47,                        /* in keyword */
-%% VAR = 48,                       /* var keyword */
-%% WITH = 49,                      /* with keyword */
-%% RETURN = 50,                    /* return keyword */
-%% NEW = 51,                       /* new keyword */
-%% DELETE = 52,                    /* delete keyword */
-%% DEFSHARP = 53,                  /* #n= for object/array initializers */
-%% USESHARP = 54,                  /* #n# for object/array initializers */
-%% TRY = 55,                       /* try keyword */
-%% CATCH = 56,                     /* catch keyword */
-%% FINALLY = 57,                   /* finally keyword */
-%% THROW = 58,                     /* throw keyword */
-%% INSTANCEOF = 59,                /* instanceof keyword */
-%% DEBUGGER = 60,                  /* debugger keyword */
-%% XMLSTAGO = 61,                  /* XML start tag open (<) */
-%% XMLETAGO = 62,                  /* XML end tag open (</) */
-%% XMLPTAGC = 63,                  /* XML point tag close (/>) */
-%% XMLTAGC = 64,                   /* XML start or end tag close (>) */
-%% XMLNAME = 65,                   /* XML start-tag non-final fragment */
-%% XMLATTR = 66,                   /* XML quoted attribute value */
-%% XMLSPACE = 67,                  /* XML whitespace */
-%% XMLTEXT = 68,                   /* XML text */
-%% XMLCOMMENT = 69,                /* XML comment */
-%% XMLCDATA = 70,                  /* XML CDATA section */
-%% XMLPI = 71,                     /* XML processing instruction */
-%% AT = 72,                        /* XML attribute op (@) */
-%% DBLCOLON = 73,                  /* namespace qualified name op (::) */
-%% ANYNAME = 74,                   /* XML AnyName singleton (*) */
-%% DBLDOT = 75,                    /* XML descendant op (..) */
-%% FILTER = 76,                    /* XML filtering predicate op (.()) */
-%% XMLELEM = 77,                   /* XML element node type (no token) */
-%% XMLLIST = 78,                   /* XML list node type (no token) */
-%% YIELD = 79,                     /* yield from generator function */
-%% ARRAYCOMP = 80,                 /* array comprehension initialiser */
-%% ARRAYPUSH = 81,                 /* array push within comprehension */
-%% LEXICALSCOPE = 82,              /* block scope AST node label */
-%% LET = 83,                       /* let keyword */
-%% BODY = 84,                      /* synthetic body of function with
-%%                                    destructuring formal parameters */
-%% RESERVED,                       /* reserved keyword */
-%% LIMIT                           /* domain size */
-%%-----------------------------------------------------------------------------------------
 
 -record(scope, {
     names = [],
@@ -134,53 +50,83 @@
     export_asts = [],
     global_asts = []}).
 
-%%--------------------------------------------------------------------
-%% @spec (JsAst::tuple(), Mod::atom(), ) -> ok | {error, error::any()}
-%% @doc
-%% compiles JS AST to Erlang beam code
-%% @end 
-%%--------------------------------------------------------------------    
-compile(JsAst, Module, Function, OutDir) ->
-    case body_ast(JsAst, #context{}) of
-        {error, _} = Err ->
-            Err;        
-        {FuncAsts, Info} ->
-            GlobalFuncAst = erl_syntax:function(erl_syntax:atom(Function),
-                [erl_syntax:clause([], none, Info#info.global_asts)]),
-                        
-            ModuleAst = erl_syntax:attribute(erl_syntax:atom(module), [erl_syntax:atom(Module)]),
-            
-            ExportGlobal = erl_syntax:arity_qualifier(erl_syntax:atom(Function), erl_syntax:integer(0)),
-            ExportAst = erl_syntax:attribute(erl_syntax:atom(export),
-                [erl_syntax:list([ExportGlobal | Info#info.export_asts])]),
 
-            Forms = [erl_syntax:revert(X) || X <- [ModuleAst, ExportAst, GlobalFuncAst | FuncAsts]],
+compile(File, Module) ->
+   compile(File, Module, {file, read_file}).
+
+
+compile(File, Module, Reader) ->
+    compile(File, Module, Reader, "ebin").
+
+     
+compile(File, Module, Reader, OutDir) ->
+    case parse(File, Reader) of
+        {ok, JsParseTree} ->    
+        
+            io:format("TRACE ~p:~p ~p~n",[?MODULE, ?LINE, JsParseTree]);
             
-            %% io:format("TRACE ~p:~p ~p~n",[?MODULE, ?LINE, Forms]),
-            io:format("TRACE ~p:~p ~p~n",[?MODULE, ?LINE, erl_syntax:revert(Forms)]),
-            
-            case compile:forms(Forms) of
-                {ok, Module1, Bin} ->       
-                    Path = filename:join([OutDir, atom_to_list(Module1) ++ ".beam"]),
-                    case file:write_file(Path, Bin) of
-                        ok ->
-                            code:purge(Module1),
-                            case code:load_binary(Module1, atom_to_list(Module1) ++ ".erl", Bin) of
-                                {module, _} -> ok;
-                                _ -> {error, "code reload failed"}
-                            end;
-                        {error, Reason} ->
-                            {error, lists:concat(["beam generation failed (", Reason, "): ", Path])}
-                    end;
-                error ->
-                    {error, "compilation failed"}
-            end                   
-    end.
+            %% case body_ast(JsParseTree, #context{}) of
+            %%     {error, _} = Err ->
+            %%         Err;        
+            %%     {FuncAsts, Info} ->
+            %%         GlobalFuncAst = erl_syntax:function(erl_syntax:atom(Function),
+            %%             [erl_syntax:clause([], none, Info#info.global_asts)]),
+            %%                     
+            %%         ModuleAst = erl_syntax:attribute(erl_syntax:atom(module), [erl_syntax:atom(Module)]),
+            %%         
+            %%         ExportGlobal = erl_syntax:arity_qualifier(erl_syntax:atom(Function), erl_syntax:integer(0)),
+            %%         ExportAst = erl_syntax:attribute(erl_syntax:atom(export),
+            %%             [erl_syntax:list([ExportGlobal | Info#info.export_asts])]),
+            %% 
+            %%         Forms = [erl_syntax:revert(X) || X <- [ModuleAst, ExportAst, GlobalFuncAst | FuncAsts]],
+            %%         
+            %%         %% io:format("TRACE ~p:~p ~p~n",[?MODULE, ?LINE, Forms]),
+            %%         io:format("TRACE ~p:~p ~p~n",[?MODULE, ?LINE, erl_syntax:revert(Forms)]),
+            %%         
+            %%         case compile:forms(Forms) of
+            %%             {ok, Module1, Bin} ->       
+            %%                 Path = filename:join([OutDir, atom_to_list(Module1) ++ ".beam"]),
+            %%                 case file:write_file(Path, Bin) of
+            %%                     ok ->
+            %%                         code:purge(Module1),
+            %%                         case code:load_binary(Module1, atom_to_list(Module1) ++ ".erl", Bin) of
+            %%                             {module, _} -> ok;
+            %%                             _ -> {error, "code reload failed"}
+            %%                         end;
+            %%                     {error, Reason} ->
+            %%                         {error, lists:concat(["beam generation failed (", Reason, "): ", Path])}
+            %%                 end;
+            %%             error ->
+            %%                 {error, "compilation failed"}
+            %%         end                   
+            %% end;
+        Error ->
+            Error
+    end.            
         		
 	
 %%====================================================================
 %% Internal functions
 %%====================================================================    
+
+scan(File, {Module, Function}) ->
+    case catch Module:Function(File) of
+        {ok, B} ->
+            erlyjs_lexer:string(binary_to_list(B));
+        _ ->
+            {error, "reading " ++ File ++ " failed "}
+    end.
+
+
+parse(File, Reader) ->
+    case scan(File, Reader) of
+        {ok, Tokens, _} ->
+            io:format("TRACE ~p:~p ~p~n",[?MODULE, ?LINE, Tokens]),
+            erlyjs_parser:parse(Tokens);
+        Err ->
+            Err
+    end.
+
 
 body_ast({{'LC', _}, List}, Context) ->
 	{ListAsts, ListInfo} = lists:foldl(fun

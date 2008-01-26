@@ -35,18 +35,8 @@
 
     
 %% API
--export([start/0, stop/0, create_lexer/0, create_parser/0]).
+-export([create_lexer/0, create_parser/0]).
 
-
-%% @spec start() -> ok
-%% @doc Start the erlyjs server.
-start() ->
-    application:start(erlyjs).
-
-%% @spec stop() -> ok
-%% @doc Stop the erlyjs server.
-stop() ->
-    application:stop(erlyjs).
 
 %%--------------------------------------------------------------------
 %% @spec () -> any()

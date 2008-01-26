@@ -644,5 +644,7 @@ build_declaration_list(DeclarationList) ->
             ({Ident, _}) ->
                 Ident
         end, DeclarationList),
+    io:format("TRACE ~p:~p List ~p~n",[?MODULE, ?LINE, List]),  % [[{{identifier,1,alpha},nil},{{identifier,1,y},nil}], {{identifier,1,str},nil}]
+    
     {_, Initializer} = lists:last(DeclarationList),
     {var, List, Initializer}.
