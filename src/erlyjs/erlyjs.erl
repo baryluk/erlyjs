@@ -33,8 +33,9 @@
 -module(erlyjs).
 -author('rsaccon@gmail.com').
 
+    
 %% API
--export([start/0, stop/0]).
+-export([start/0, stop/0, create_lexer/0, create_parser/0]).
 
 
 %% @spec start() -> ok
@@ -46,3 +47,51 @@ start() ->
 %% @doc Stop the erlyjs server.
 stop() ->
     application:stop(erlyjs).
+
+%%--------------------------------------------------------------------
+%% @spec () -> any()
+%% @doc creates the yecc-based ErlyJS parser
+%% @end 
+%%--------------------------------------------------------------------
+create_parser() ->
+    create_parser("src/erlyjs/erlyjs_parser", "ebin").
+        
+create_lexer() ->
+    create_lexer("src/erlyjs/erlyjs_lexer", "ebin").
+
+
+%%====================================================================
+%% Internal functions
+%%====================================================================
+
+create_lexer(Path, Outdir) ->
+    case leex:file(Path) of
+        ok ->
+            compile(Path, Outdir, "Lexer");
+        _ ->
+            {error, "leexer generation failed"}
+    end.
+
+    
+create_parser(Path, Outdir) ->
+    case yecc:file(Path) of
+        {ok, _} ->
+            compile(Path, Outdir, "Parser");
+        _ ->
+            {error, "parser generation failed"}
+    end.
+
+
+compile(Path, Outdir, Name) ->
+    case compile:file(Path, [{outdir, Outdir}]) of
+        {ok, Bin} ->
+            code:purge(Bin),
+            case code:load_file(Bin) of
+                {module, _} ->
+                    ok;
+                _ ->
+                    {error, Name ++ "reload failed"}
+            end;
+        _ ->
+            {error, Name ++ "compilation failed"}
+    end.

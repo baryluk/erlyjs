@@ -1,10 +1,15 @@
-%%% ------------------------------------------------------------------
-%%% File: jserl_lexer.xrl
+%%%-------------------------------------------------------------------
+%%% File:      erlyjs_lexer.xrl
+%%% @author    Roberto Saccon <rsaccon@gmail.com> [http://rsaccon.com]
+%%% @copyright 2007 Roberto Saccon
+%%% @doc  
+%%% ErlyJS Leexer
+%%% @end  
 %%%
-%%% @author Roberto Saccon <roberto@skast.com>
+%%% The MIT License
 %%%
-%%% License
-%%% =======
+%%% Copyright (c) 2007 Roberto Saccon
+%%%
 %%% Permission is hereby granted, free of charge, to any person obtaining a copy
 %%% of this software and associated documentation files (the "Software"), to deal
 %%% in the Software without restriction, including without limitation the rights
@@ -21,17 +26,14 @@
 %%% AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 %%% LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 %%% OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-%%% THE SOFTWARE
+%%% THE SOFTWARE.
 %%%
 %%% Acknowledgements
 %%% ================
 %%% special thanks to Denis Loutrein for initial code donation
 %%%
-%%% -------------------------------------------------------------------
-%%% @doc
-%%% @end
-%%% @since 16 Sep 2007 by Roberto Saccon <roberto@skast.com>
-%%% ------------------------------------------------------------------
+%%% @since 2007-12-23 by Roberto Saccon
+%%%-------------------------------------------------------------------
 
 Definitions.
 
@@ -44,9 +46,8 @@ STRING = "(\\\^.|\\.|[^"])*"
 QUOTE = '(\\\^.|\\.|[^'])*'
 COMMENT = (/\*(.|[\r\n])*?\*/|//.*)
 
-Rules.   
 
-%% COMMENT =   (/\*(.|\n)*?\*/|//.*)
+Rules.   
 
 %% float
 {DECIMAL}+\.{DECIMAL}+ :     {token,{float,TokenLine,list_to_float(TokenChars)}}.
