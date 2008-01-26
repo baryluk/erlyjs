@@ -11,7 +11,7 @@ function plus_first(a, b) {
 }
 
 function plus_second(c, d) {
-	var r1, r2;
-	r = 1;
-	return r;
+	// var r, o, p, q;
+	// q = {"a":4, "b":false};
+	return 5;
 }

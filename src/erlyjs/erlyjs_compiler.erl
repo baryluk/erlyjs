@@ -194,8 +194,8 @@ body_ast({{'LC', _}, List}, Context) ->
 	    end,
 	    {[], #info{scopes = Context#context.scopes}},
 	    lists:reverse(List)),
-	{lists:reverse(ListAsts), ListInfo};
-	
+	{lists:reverse(ListAsts), ListInfo};    	
+    	
 body_ast({{'SEMI', _}, Val}, Context) ->
     body_ast(Val, Context);
 
