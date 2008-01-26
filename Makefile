@@ -4,18 +4,10 @@ ERL=/Users/rsaccon/R11B/start.sh
 
 all:
 	$(ERL) -make
-	
-cnode:
-	( cd c_src && $(MAKE) )
 
 run:
-	$(ERL) -pa `pwd`/ebin \
-	-s erlyjs \
-	-sname erlyjs
+	$(ERL) -pa `pwd`/ebin
 	
 clean:
 	rm -fv ebin/*.beam
 	rm -fv erl_crash.dump
-	
-clean-cnode:
-	( cd c_src && $(MAKE) clean )
