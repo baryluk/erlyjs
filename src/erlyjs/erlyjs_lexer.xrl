@@ -30,7 +30,7 @@
 %%%
 %%% Acknowledgements
 %%% ================
-%%% special thanks to Denis Loutrein for initial code donation
+%%% special thanks to Denis Loutrein for initial code contribution
 %%%
 %%% @since 2007-12-23 by Roberto Saccon
 %%%-------------------------------------------------------------------
