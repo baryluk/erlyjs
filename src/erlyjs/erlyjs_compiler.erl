@@ -66,13 +66,10 @@ compile(File, Module, Reader, OutDir) ->
         {ok, JsParseTree} ->               
             io:format("TRACE ~p:~p JsParseTree: ~p~n",[?MODULE, ?LINE, JsParseTree]),
             try body_ast(JsParseTree, #js_context{reader = Reader}, [#scope{}]) of
-                {AstList, Info, _} ->
-                    io:format("TRACE ~p:~p ~p~n",[?MODULE, ?LINE, erl_syntax:revert(AstList)]),
-                    
-                    _Forms = forms(Module, AstList, Info),  
-                    
-                    %% compile_forms(OutDir, Forms)                                      
-                    ok
+                {AstList, Info, _} ->                
+                    Forms = forms(Module, AstList, Info),  
+                    io:format("TRACE ~p:~p ~p~n",[?MODULE, ?LINE, Forms]),
+                    compile_forms(OutDir, Forms)                                      
             catch 
                 throw:Error -> Error
             end;
@@ -109,9 +106,7 @@ forms(Module, FuncAsts, Info) ->
     ExportGlobal = erl_syntax:arity_qualifier(erl_syntax:atom("run"), erl_syntax:integer(0)),
     ExportAst = erl_syntax:attribute(erl_syntax:atom(export),
         [erl_syntax:list([ExportGlobal | Info#ast_info.export_asts])]),
-    Forms = [erl_syntax:revert(X) || X <- [ModuleAst, ExportAst, GlobalFuncAst | FuncAsts]],
-    %% io:format("TRACE ~p:~p ~p~n",[?MODULE, ?LINE, Forms]),
-    io:format("TRACE ~p:~p ~p~n",[?MODULE, ?LINE, erl_syntax:revert(Forms)]).
+    [erl_syntax:revert(X) || X <- [ModuleAst, ExportAst, GlobalFuncAst | FuncAsts]].
     
  
 compile_forms(OutDir, Forms) ->    
@@ -174,23 +169,38 @@ empty_ast(Context, Scopes) ->
     {{[], #ast_info{}}, {Context, Scopes}}.  
     
     
+name(Name, #js_context{action = set} = Context, [GlobalScope]) ->
+    %% global scope varaible setter
+    todo;
 name(Name, #js_context{action = set} = Context, Scopes) ->
-    H = hd(Scopes),
-    %
-    Name1 = erl_syntax_lib:new_variable_name(H#scope.names_used_set),
-    Names = [Name1 | H#scope.names],
-    Set = sets:add_element(Name1, H#scope.names_used_set),
-    Dict = dict:store(Name, Name1, H#scope.names_dict),
-    H2 = #scope{names = Names, names_used_set = Set, names_dict = Dict},
-    %
-    {{erl_syntax:variable(Name1), #ast_info{}}, {Context, [H2 | tl(Scopes)]}}; 
+    Current = hd(Scopes),
+    Name1 = erl_syntax_lib:new_variable_name(Current#scope.names_used_set),
+    Names = [Name1 | Current#scope.names],
+    Set = sets:add_element(Name1, Current#scope.names_used_set),
+    Dict = dict:store(Name, Name1, Current#scope.names_dict),
+    Current2 = #scope{names = Names, names_used_set = Set, names_dict = Dict},
+    {{erl_syntax:variable(Name1), #ast_info{}}, {Context, [Current2 | tl(Scopes)]}}; 
 name(Name, #js_context{action = get} = Context, Scopes) ->
-    H = hd(Scopes),
-    Name1 = dict:fetch(Name, H#scope.names_dict),
-    {{erl_syntax:variable(Name1), #ast_info{}}, {Context, Scopes}}.
+    case name_search(Name, Scopes, []) of
+        undefined ->
+            throw({error, lists:concat(["undefined variable: ", Name])});
+        {Name1, Scope1} ->
+            {{erl_syntax:variable(Name1), #ast_info{}}, {Context, Name1}}
+    end.
+  
+name_search(Name, [], Acc) ->
+    undefined;
+name_search(Name, [H | T], Acc) ->
+    case dict:find(Name, H#scope.names_dict) of
+        {ok, Value} ->
+            {Value, lists:merge(lists:reverse(Acc), [H | T])};
+        error ->
+            name_search(Name, T, [H | Acc]) 
+    end.
     
     
 var_init(Name, Value, Context, Scopes) ->
+    %% TODO: Name stuff
     {AstValue, Info, Vars2} = body_ast(Value, Context, Scopes),
     Ast = erl_syntax:match_expr(erl_syntax:variable("Var"), AstValue),  
     {{Ast, #ast_info{}}, {Context, Vars2}}. 
@@ -216,22 +226,7 @@ merge_info(Info1, Info2) ->
     #ast_info{
         export_asts = lists:merge(Info1#ast_info.export_asts, Info2#ast_info.export_asts),
         global_asts = lists:merge(Info1#ast_info.global_asts, Info2#ast_info.global_asts)}. 
-        
-        
-             
-name_new(Scope, Name) ->
-    Name1 = erl_syntax_lib:new_variable_name(Scope#scope.names_used_set),
-    Names = [Name1 | Scope#scope.names],
-    Set = sets:add_element(Name1, Scope#scope.names_used_set),
-    Dict = dict:store(Name, Name1, Scope#scope.names_dict),
-    {Name1, #scope{names = Names, names_used_set = Set, names_dict = Dict}}.
-    
-name_update(Scope, Name) ->
-    Name1 = erl_syntax_lib:new_variable_name(Scope#scope.names_used_set),
-    Names = [Name1 | Scope#scope.names],
-    Set = sets:add_element(Name1, Scope#scope.names_used_set),
-    Dict = dict:store(Name, Name1, Scope#scope.names_dict),
-    {Name1, #scope{names = Names, names_dict = Dict}}.    
+       
            
 
 %% body_ast({{'LC', _}, List}, Context) ->
