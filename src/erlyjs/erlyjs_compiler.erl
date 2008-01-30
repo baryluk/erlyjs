@@ -63,12 +63,12 @@ compile(File, Module, Reader) ->
      
 compile(File, Module, Reader, OutDir) ->
     case parse(File, Reader) of
-        {ok, JsParseTree} ->               
+        {ok, JsParseTree} ->    
             io:format("TRACE ~p:~p JsParseTree: ~p~n",[?MODULE, ?LINE, JsParseTree]),
             try body_ast(JsParseTree, #js_context{reader = Reader}, [#scope{}]) of
                 {AstList, Info, _} ->                
                     Forms = forms(Module, AstList, Info),  
-                    io:format("TRACE ~p:~p ~p~n",[?MODULE, ?LINE, Forms]),
+                    io:format("TRACE ~p:~p Forms: ~p~n",[?MODULE, ?LINE, Forms]),
                     compile_forms(OutDir, Forms)                                      
             catch 
                 throw:Error -> Error
@@ -100,14 +100,21 @@ parse(File, Reader) ->
     end.                                             
 
 forms(Module, FuncAsts, Info) ->
-    GlobalFuncAst = erl_syntax:function(erl_syntax:atom("run"),
-        [erl_syntax:clause([], none, Info#ast_info.global_asts)]),            
+    GlobalFuncAstBody = case Info#ast_info.global_asts of
+        [] -> 
+            [erl_syntax:tuple([erl_syntax:atom("error"),
+                erl_syntax:string("no global executable code")])];
+        List -> 
+            List
+    end,
+    GlobalFuncAst = erl_syntax:function(erl_syntax:atom("js"),
+        [erl_syntax:clause([], none, GlobalFuncAstBody)]),            
     ModuleAst = erl_syntax:attribute(erl_syntax:atom(module), [erl_syntax:atom(Module)]),
-    ExportGlobal = erl_syntax:arity_qualifier(erl_syntax:atom("run"), erl_syntax:integer(0)),
+    ExportGlobal = erl_syntax:arity_qualifier(erl_syntax:atom("js"), erl_syntax:integer(0)),
     ExportAst = erl_syntax:attribute(erl_syntax:atom(export),
         [erl_syntax:list([ExportGlobal | Info#ast_info.export_asts])]),
     [erl_syntax:revert(X) || X <- [ModuleAst, ExportAst, GlobalFuncAst | FuncAsts]].
-    
+        
  
 compile_forms(OutDir, Forms) ->    
     case compile:forms(Forms) of
@@ -135,7 +142,7 @@ body_ast(JsParseTree, Context, Scopes) when is_list(JsParseTree) ->
             ({XAst, XInfo}, InfoAcc) ->
                 {XAst, merge_info(XInfo, InfoAcc)}
         end, #ast_info{}, AstInfoList),
-    {AstList, Info, Scopes1};
+    {lists:flatten(AstList), Info, Scopes1};
        
 body_ast(JsParseTree, Context, Scopes) ->
     {{Ast, Info}, {_, Vars}} = ast(JsParseTree, {Context, Scopes}),
@@ -146,7 +153,7 @@ body_ast(JsParseTree, Context, Scopes) ->
 ast({integer, L, Value}, {Context, Scopes}) -> 
     {{erl_syntax:integer(Value), #ast_info{}}, {Context, Scopes}};
 ast({identifier, L, Name}, {Context, Scopes}) ->  
-    name(Name, Context, Scopes);
+    var_name(Name, Context, Scopes);
 ast({{identifier, L, Name}, Value}, {Context, Scopes}) ->  
     var_init(Name, Value, Context, Scopes);             
 ast({{var,L}, DeclarationList}, {Context, Scopes}) ->
@@ -169,10 +176,10 @@ empty_ast(Context, Scopes) ->
     {{[], #ast_info{}}, {Context, Scopes}}.  
     
     
-name(Name, #js_context{action = set} = Context, [GlobalScope]) ->
-    %% global scope varaible setter
+var_name(Name, #js_context{action = set} = Context, [GlobalScope]) ->
+    %% TODO: global scope variable setter
     todo;
-name(Name, #js_context{action = set} = Context, Scopes) ->
+var_name(Name, #js_context{action = set} = Context, Scopes) ->
     Current = hd(Scopes),
     Name1 = erl_syntax_lib:new_variable_name(Current#scope.names_used_set),
     Names = [Name1 | Current#scope.names],
@@ -180,34 +187,43 @@ name(Name, #js_context{action = set} = Context, Scopes) ->
     Dict = dict:store(Name, Name1, Current#scope.names_dict),
     Current2 = #scope{names = Names, names_used_set = Set, names_dict = Dict},
     {{erl_syntax:variable(Name1), #ast_info{}}, {Context, [Current2 | tl(Scopes)]}}; 
-name(Name, #js_context{action = get} = Context, Scopes) ->
+var_name(Name, #js_context{action = get} = Context, Scopes) ->
     case name_search(Name, Scopes, []) of
         undefined ->
             throw({error, lists:concat(["undefined variable: ", Name])});
-        {Name1, Scope1} ->
-            {{erl_syntax:variable(Name1), #ast_info{}}, {Context, Name1}}
+        {global, Name1, Scopes1} ->
+            %% TODO: implement local message passing based solution for global variable getter
+            todo;
+        {Name1, Scopes1} ->
+            {{erl_syntax:variable(Name1), #ast_info{}}, {Context, Scopes1}}
     end.
+    
+var_init(Name, Value, Context, Scopes) ->
+    {{AstVariable, Info}, {_, Scopes1}}  = var_name(Name, Context, Scopes),
+    {AstValue, Info1, Scopes2} = body_ast(Value, Context, Scopes1),
+    Ast = erl_syntax:match_expr(AstVariable, AstValue),  
+    {{Ast, Info1}, {Context, Scopes2}}.    
+
   
 name_search(Name, [], Acc) ->
     undefined;
 name_search(Name, [H | T], Acc) ->
     case dict:find(Name, H#scope.names_dict) of
         {ok, Value} ->
-            {Value, lists:merge(lists:reverse(Acc), [H | T])};
+            Scopes = lists:merge(lists:reverse(Acc), [H | T]),
+            case T of
+                [] ->
+                    {gloabl, Value, Scopes};
+                _ ->
+                    {Value, Scopes}
+            end;
         error ->
             name_search(Name, T, [H | Acc]) 
     end.
-    
-    
-var_init(Name, Value, Context, Scopes) ->
-    %% TODO: Name stuff
-    {AstValue, Info, Vars2} = body_ast(Value, Context, Scopes),
-    Ast = erl_syntax:match_expr(erl_syntax:variable("Var"), AstValue),  
-    {{Ast, #ast_info{}}, {Context, Vars2}}. 
-            
+             
             
 func(Name, Params, Body, Context, Scopes) ->  
-    Name1 = "func_" ++ atom_to_list(Name), 
+    Name1 = "js_" ++ atom_to_list(Name), 
     {Params1, _, Scopes1} = body_ast(Params, Context, [#scope{} | Scopes]),          
     {Ast, Info, Scopes2} = body_ast(Body, Context#js_context{global = false}, Scopes1),
     Ast1 = erl_syntax:function(erl_syntax:atom(Name1),
@@ -228,38 +244,13 @@ merge_info(Info1, Info2) ->
         global_asts = lists:merge(Info1#ast_info.global_asts, Info2#ast_info.global_asts)}. 
        
            
+check_call(console, log)  ->
+    {erlyjs_api_console, log};
 
-%% body_ast({{'LC', _}, List}, Context) ->
-%%  {ListAsts, ListInfo} = lists:foldl(fun
-%%          (X, {AccAsts, AccInfo}) ->
-%%              case body_ast(X, Context#context{scopes = AccInfo#info.scopes}) of
-%%                  {Asts, Info} when is_list(Asts) ->  
-%%                      {lists:merge(Asts, AccAsts), info_merge(Info, AccInfo)};
-%%                  {Ast, Info} ->  
-%%                      {[Ast | AccAsts], info_merge(AccInfo, Info)}
-%%              end
-%%      end,
-%%      {[], #info{scopes = Context#context.scopes}},
-%%      lists:reverse(List)),
-%%  {lists:reverse(ListAsts), ListInfo};        
-%%      
-%% body_ast({{'SEMI', _}, Val}, Context) ->
-%%     body_ast(Val, Context);
-%% 
-%% body_ast({{'RETURN', _}, Val}, Context) ->
-%%     body_ast(Val, Context);
-%%             
-%% body_ast({{'STRING', _}, Val}, Context) ->
-%%     %% TODO: switch to binaries
-%%     {erl_syntax:string(Val), #info{}};
-%%     
-%% body_ast({{'NUMBER', _}, Val}, Context) ->
-%%     %% TODO: either integer or float
-%%     {erl_syntax:float(Val), #info{}};
-%%     
-%% body_ast({{'NAME', _}, Name, Attr, Slot}, Context) ->
-%%     VarName = var_name(hd(Context#context.scopes), Name),
-%%     return(erl_syntax:variable(VarName), #info{}, Context);
+check_call(_, _) ->
+    error.
+            
+%% old snippet from Spidermonkey based version
 %%     
 %% body_ast({{'DOT',_}, Name, {{'NAME',_}, Class, Attr, Slot}}, Context) ->
 %%     case check_call(Class, Name) of
@@ -270,95 +261,3 @@ merge_info(Info1, Info2) ->
 %%             io:format("TRACE ~p:~p DOT ~p~n",[?MODULE, ?LINE, error]),
 %%             {[], #info{}}
 %%     end;
-%%         
-%% body_ast({{'LP', _}, List}, Context) when is_list(List) ->
-%%     List1 = lists:reverse(List),    
-%%     ArgAsts = lists:foldr(fun
-%%             (X, AccAsts) ->
-%%                 case body_ast(X, Context) of
-%%                     {Asts, _} when is_list(Asts) ->                        
-%%                         lists:merge(Asts, AccAsts);
-%%                     {Ast, _} ->                        
-%%                         [Ast | AccAsts]
-%%                 end
-%%         end, [], tl(List1)), 
-%%     {MethodAst,_} = body_ast(hd(List1), Context#context{args = ArgAsts}),   
-%%     return(MethodAst, #info{}, Context);
-%%         
-%% body_ast({{'STAR', _}, Left, Right}, Context) ->
-%%     %% TODO
-%%     {AstInnerLeft,InfoLeft} = body_ast(Left, Context),
-%%     {AstInnerRight,InfoRight} = body_ast(Right, Context),
-%%     Info = info_merge(InfoLeft, InfoRight),
-%%     {[AstInnerLeft, erl_syntax:operator("*"), AstInnerRight], Info};            
-%%     
-%% body_ast({{'FUNCTION', _}, Name, Args, Body}, Context) ->
-%%     Scopes = [#scope{} | Context#context.scopes],
-%%     {AstInner,Info} = body_ast(Body, Context#context{scopes=Scopes, global = false}),
-%%     Args1 = [erl_syntax:variable("Var" ++ atom_to_list(X)) || X <- Args],                   {Params2, _, Vars2} = body_ast(Params, Context, Vars),
-%%     FuncName = "func_" ++ atom_to_list(Name),
-%%     Ast = erl_syntax:function(erl_syntax:atom(FuncName),
-%%         [erl_syntax:clause(Args1, none, AstInner)]),
-%%     case Context#context.global of
-%%         true->
-%%             Export = erl_syntax:arity_qualifier(erl_syntax:atom(FuncName), erl_syntax:integer(length(Args))),
-%%             Exports = [Export | Info#info.export_asts], 
-%%             {Ast, Info#info{export_asts = Exports}};
-%%         _ ->
-%%             {Ast, Info}
-%%     end;
-%%             
-%% body_ast({{'ASSIGN', _}, {{'NAME', _}, Name, _, _}, Right}, Context) ->
-%%     {AstInner,Info} = body_ast(Right, Context),
-%%     {Scope, VarName} = var_name_update(hd(Context#context.scopes), Name),
-%%     Ast = erl_syntax:match_expr(erl_syntax:variable(VarName), AstInner),  
-%%     return(Ast, Scope, #info{}, Context);
-%%         
-%% body_ast({{'VAR', _}, List}, Context) when is_list(List) ->
-%%     {Asts, Scope} = lists:foldl(fun
-%%             ({{'NAME', _}, X, _, _}, {AccAsts, AccScope}) ->          
-%%                 {Scope, VarName} = var_name_update(AccScope, X),
-%%                 Ast = erl_syntax:match_expr(erl_syntax:variable(VarName), erl_syntax:atom(undefined)),
-%%                 {[Ast | AccAsts], Scope}                        
-%%         end, {[], hd(Context#context.scopes)}, lists:reverse(List)),
-%%     return(Asts, Scope, #info{}, Context);
-%%         
-%% body_ast({error, Reason}, _) ->
-%%     io:format("TRACE ~p:~p Error: ~p~n",[?MODULE, ?LINE, Reason]),
-%%     {[], Reason};
-%%         
-%% body_ast(Other, _) ->
-%%     io:format("TRACE ~p:~p Other: ~p~n",[?MODULE, ?LINE, Other]),
-%%  {[], #info{}}.
-%%  
-%%  
-%%  
-%% return(Ast, Info, Context) ->
-%%     Scopes = Context#context.scopes,   
-%%     case Context#context.global of
-%%         true ->  
-%%             {[], Info#info{scopes = Scopes, global_asts = merge_ast(Ast, Info)}};
-%%         _ -> 
-%%             {Ast, Info#info{scopes = Scopes}}
-%%     end.
-%%     
-%% return(Ast, Scope, Info, Context) ->
-%%     Scopes = Context#context.scopes,   
-%%     case Context#context.global of
-%%         true ->
-%%             {[],  #info{scopes = [Scope | tl(Scopes)], global_asts = merge_ast(Ast, Info)}}; 
-%%         _ -> 
-%%             {Ast, #info{scopes = [Scope | tl(Scopes)]}} 
-%%     end.
-%%  
-%% merge_ast(Ast, #info{global_asts = Asts}) when is_list(Ast) ->
-%%     lists:merge(lists:reverse(Ast), Asts);   
-%% merge_ast(Ast, #info{global_asts = Asts}) ->
-%%     [Ast | Asts].   
-         
-    
-check_call(console, log)  ->
-    {erlyjs_api_console, log};
-    
-check_call(_, _) ->
-    error.

@@ -33,7 +33,7 @@
 -author('rsaccon@gmail.com').
 
 %% API
--export([test/0, test/1]).
+-export([compile/0, test/1]).
 
 %%====================================================================
 %% API
@@ -44,7 +44,7 @@
 %% @doc
 %% @end 
 %%--------------------------------------------------------------------
-test() ->        
+compile() ->        
     Dir = filename:join([filename:dirname(code:which(?MODULE)),"..", "demo"]),
     test(filename:join([Dir, "test.js"])).
 
