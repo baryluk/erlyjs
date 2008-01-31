@@ -100,20 +100,43 @@ parse(File, Reader) ->
     end.                                             
 
 forms(Module, FuncAsts, Info) ->
-    GlobalFuncAstBody = case Info#ast_info.global_asts of
+    InitFuncAstBody = case Info#ast_info.global_asts of
         [] -> 
             [erl_syntax:tuple([erl_syntax:atom("error"),
                 erl_syntax:string("no global executable code")])];
         List -> 
-            List
+            lists:reverse([erl_syntax:atom(ok) | lists:reverse(List)]) 
     end,
-    GlobalFuncAst = erl_syntax:function(erl_syntax:atom("js"),
-        [erl_syntax:clause([], none, GlobalFuncAstBody)]),            
+    InitFuncAst = erl_syntax:function(erl_syntax:atom("jsinit"),
+        [erl_syntax:clause([], none, InitFuncAstBody)]),    
+    ResetFuncAstFunBodyCase = erl_syntax:application(erl_syntax:atom(string), 
+        erl_syntax:atom(str), [erl_syntax:variable("KeyString"), erl_syntax:string("js_")]),
+    ResetFuncAstFunBody = [
+        erl_syntax:match_expr(
+            erl_syntax:tuple([erl_syntax:variable("Key"), erl_syntax:underscore()]), 
+                erl_syntax:variable("X")),
+        erl_syntax:match_expr(erl_syntax:variable("KeyString"),
+            erl_syntax:application(none, erl_syntax:atom(atom_to_list), 
+                [erl_syntax:variable("Key")])),
+        erl_syntax:case_expr(ResetFuncAstFunBodyCase, [
+            erl_syntax:clause([erl_syntax:integer(1)], none, [
+                erl_syntax:application(none, erl_syntax:atom(erase),
+                    [erl_syntax:variable("Key")])]),
+            erl_syntax:clause([erl_syntax:underscore()], none, [erl_syntax:atom(ok)])])],           
+    ResetFuncAstBody = [
+        erl_syntax:application(erl_syntax:atom(lists), erl_syntax:atom(map), [
+            erl_syntax:fun_expr([erl_syntax:clause(
+                [erl_syntax:variable("X")], none, ResetFuncAstFunBody)]),
+            erl_syntax:application(none, erl_syntax:atom(get), [])]),
+        erl_syntax:atom(ok)],
+    ResetFuncAst = erl_syntax:function(erl_syntax:atom("jsreset"),
+       [erl_syntax:clause([], none, ResetFuncAstBody)]),                   
     ModuleAst = erl_syntax:attribute(erl_syntax:atom(module), [erl_syntax:atom(Module)]),
-    ExportGlobal = erl_syntax:arity_qualifier(erl_syntax:atom("js"), erl_syntax:integer(0)),
+    ExportInit = erl_syntax:arity_qualifier(erl_syntax:atom("jsinit"), erl_syntax:integer(0)),
+    ExportReset = erl_syntax:arity_qualifier(erl_syntax:atom("jsreset"), erl_syntax:integer(0)),
     ExportAst = erl_syntax:attribute(erl_syntax:atom(export),
-        [erl_syntax:list([ExportGlobal | Info#ast_info.export_asts])]),
-    [erl_syntax:revert(X) || X <- [ModuleAst, ExportAst, GlobalFuncAst | FuncAsts]].
+        [erl_syntax:list([ExportInit, ExportReset | Info#ast_info.export_asts])]),
+    [erl_syntax:revert(X) || X <- [ModuleAst, ExportAst, InitFuncAst, ResetFuncAst | FuncAsts]].
         
  
 compile_forms(OutDir, Forms) ->    
@@ -142,12 +165,10 @@ body_ast(JsParseTree, Context, Scopes) when is_list(JsParseTree) ->
             ({XAst, XInfo}, InfoAcc) ->
                 {XAst, merge_info(XInfo, InfoAcc)}
         end, #ast_info{}, AstInfoList),
-    {lists:flatten(AstList), Info, Scopes1};
-       
+    {lists:flatten(AstList), Info, Scopes1};     
 body_ast(JsParseTree, Context, Scopes) ->
     {{Ast, Info}, {_, Vars}} = ast(JsParseTree, {Context, Scopes}),
     {Ast, Info, Scopes}.
-    
     
 
 ast({integer, L, Value}, {Context, Scopes}) -> 
@@ -175,35 +196,43 @@ ast(Unknown, {Context, Scopes}) ->
 empty_ast(Context, Scopes) ->
     {{[], #ast_info{}}, {Context, Scopes}}.  
     
-    
-var_name(Name, #js_context{action = set} = Context, [GlobalScope]) ->
-    %% TODO: global scope variable setter
-    todo;
+      
 var_name(Name, #js_context{action = set} = Context, Scopes) ->
-    Current = hd(Scopes),
-    Name1 = erl_syntax_lib:new_variable_name(Current#scope.names_used_set),
-    Names = [Name1 | Current#scope.names],
-    Set = sets:add_element(Name1, Current#scope.names_used_set),
-    Dict = dict:store(Name, Name1, Current#scope.names_dict),
-    Current2 = #scope{names = Names, names_used_set = Set, names_dict = Dict},
-    {{erl_syntax:variable(Name1), #ast_info{}}, {Context, [Current2 | tl(Scopes)]}}; 
+    Scope = hd(Scopes),
+    Name1 = erl_syntax_lib:new_variable_name(Scope#scope.names_used_set),
+    Names = [Name1 | Scope#scope.names],
+    Set = sets:add_element(Name1, Scope#scope.names_used_set),
+    Dict = dict:store(Name, Name1, Scope#scope.names_dict),
+    Scope1 = #scope{names = Names, names_used_set = Set, names_dict = Dict},
+    {{erl_syntax:variable(Name1), #ast_info{}}, {Context, [Scope1 | tl(Scopes)]}}; 
 var_name(Name, #js_context{action = get} = Context, Scopes) ->
     case name_search(Name, Scopes, []) of
         undefined ->
-            throw({error, lists:concat(["undefined variable: ", Name])});
+            throw({error, lists:concat(["ReferenceError: ", Name, " is not defined"])});
         {global, Name1, Scopes1} ->
-            %% TODO: implement local message passing based solution for global variable getter
-            todo;
+            Args = [erl_syntax:atom(Name1)], 
+            Ast = erl_syntax:applciation(none, erl_syntax:atom(get), Args),
+            {{Ast, #ast_info{}}, {Context, Scopes1}};
         {Name1, Scopes1} ->
             {{erl_syntax:variable(Name1), #ast_info{}}, {Context, Scopes1}}
     end.
-    
+       
+var_init(Name, Value, Context, [GlobalScope]) ->
+    Name1 = lists:concat(["js_", Name]),
+    Names = lists:usort([Name1 | GlobalScope#scope.names]),
+    Dict = dict:store(Name, Name1, GlobalScope#scope.names_dict),
+    GlobalScope1 = #scope{names = Names, names_dict = Dict},
+    {ValueAst, Info1, Scopes2} = body_ast(Value, Context, [GlobalScope1]),
+    Args = [erl_syntax:atom(Name1), ValueAst], 
+    Ast = erl_syntax:application(none, erl_syntax:atom(put), Args), 
+    Asts = [Ast | Info1#ast_info.global_asts],
+    {{[], Info1#ast_info{global_asts = Asts}}, {Context, Scopes2}};  
 var_init(Name, Value, Context, Scopes) ->
     {{AstVariable, Info}, {_, Scopes1}}  = var_name(Name, Context, Scopes),
     {AstValue, Info1, Scopes2} = body_ast(Value, Context, Scopes1),
     Ast = erl_syntax:match_expr(AstVariable, AstValue),  
-    {{Ast, Info1}, {Context, Scopes2}}.    
-
+    {{Ast, Info1}, {Context, Scopes2}}.
+    
   
 name_search(Name, [], Acc) ->
     undefined;
