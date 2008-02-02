@@ -167,27 +167,31 @@ body_ast(JsParseTree, Context, Scopes) when is_list(JsParseTree) ->
         end, #ast_info{}, AstInfoList),
     {lists:flatten(AstList), Info, Scopes1};     
 body_ast(JsParseTree, Context, Scopes) ->
-    {{Ast, Info}, {_, Vars}} = ast(JsParseTree, {Context, Scopes}),
-    {Ast, Info, Scopes}.
+    {{Ast, Info}, {_, Scopes1}} = ast(JsParseTree, {Context, Scopes}),
+    {Ast, Info, Scopes1}.
     
 
-ast({integer, L, Value}, {Context, Scopes}) -> 
+ast({integer, _L, Value}, {Context, Scopes}) -> 
     {{erl_syntax:integer(Value), #ast_info{}}, {Context, Scopes}};
-ast({identifier, L, Name}, {Context, Scopes}) ->  
+ast({string, _L, Value}, {Context, Scopes}) -> 
+    {{erl_syntax:string(Value), #ast_info{}}, {Context, Scopes}}; %% TODO: binary
+ast({identifier, _L, Name}, {Context, Scopes}) ->  
     var_name(Name, Context, Scopes);
-ast({{identifier, L, Name}, Value}, {Context, Scopes}) ->  
+ast({{identifier, _L, Name}, Value}, {Context, Scopes}) ->  
     var_init(Name, Value, Context, Scopes);             
-ast({{var,L}, DeclarationList}, {Context, Scopes}) ->
+ast({{var, _L}, DeclarationList}, {Context, Scopes}) ->
     {Ast, Info, Scopes1} = body_ast(DeclarationList, Context, Scopes),
     {{Ast, Info}, {Context, Scopes1}}; 
-ast({return, L}, {Context, Scopes}) -> 
+ast({return, _L}, {Context, Scopes}) -> 
     %% TODO: add grammar rule and logic
     empty_ast(Context, Scopes);
-ast({{return, L}, Expression}, {Context, Scopes}) -> 
+ast({{return, _L}, Expression}, {Context, Scopes}) -> 
     %% TODO: evaluate Expression, not just variable, add logic
     ast(Expression, {Context#js_context{action = get}, Scopes});
-ast({{function, L1}, {identifier, L2, Name}, {params, Params, body, Body}}, {Context, Scopes}) ->
-    func(Name, Params, Body, Context, Scopes);
+ast({{function, _L1}, {identifier, _L2, Name}, {params, Params, body, Body}}, {Context, Scopes}) ->
+    func(Name, Params, Body, Context, Scopes);      
+ast({{{identifier, _L, Name}, MemberList}, {'(', Args}}, {Context, Scopes}) ->
+    call(Name, MemberList, Args, Context, Scopes);
 ast(Unknown, {Context, Scopes}) ->       
     io:format("TRACE ~p:~p Unknown: ~p~n",[?MODULE, ?LINE, Unknown]),
     empty_ast(Context, Scopes).
@@ -228,13 +232,13 @@ var_init(Name, Value, Context, [GlobalScope]) ->
     Asts = [Ast | Info1#ast_info.global_asts],
     {{[], Info1#ast_info{global_asts = Asts}}, {Context, Scopes2}};  
 var_init(Name, Value, Context, Scopes) ->
-    {{AstVariable, Info}, {_, Scopes1}}  = var_name(Name, Context, Scopes),
-    {AstValue, Info1, Scopes2} = body_ast(Value, Context, Scopes1),
+    {{AstVariable, _}, {_, Scopes1}}  = var_name(Name, Context, Scopes),
+    {AstValue, Info, Scopes2} = body_ast(Value, Context, Scopes1),
     Ast = erl_syntax:match_expr(AstVariable, AstValue),  
-    {{Ast, Info1}, {Context, Scopes2}}.
+    {{Ast, Info}, {Context, Scopes2}}.
     
   
-name_search(Name, [], Acc) ->
+name_search(_, [], _) ->
     undefined;
 name_search(Name, [H | T], Acc) ->
     case dict:find(Name, H#scope.names_dict) of
@@ -261,9 +265,27 @@ func(Name, Params, Body, Context, Scopes) ->
         true->
             Export = erl_syntax:arity_qualifier(erl_syntax:atom(Name1), erl_syntax:integer(length(Params))),
             Exports = [Export | Info#ast_info.export_asts], 
-            {{Ast1, Info#ast_info{export_asts = Exports}}, {Context, Scopes}};
+            {{Ast1, Info#ast_info{export_asts = Exports}}, {Context, Scopes2}};
         _ ->
-            {{Ast1, Info}, {Context, Scopes}}
+            {{Ast1, Info}, {Context, Scopes2}}
+    end.
+
+    
+call(Name, MemberList, Args, Context, Scopes) ->
+    {Ast, Scopes2} = case check_call(Name, MemberList) of
+        {Module, Function} ->
+            {Args1, _, Scopes1} = body_ast(Args, Context, Scopes),    
+            {erl_syntax:application(erl_syntax:atom(Module), erl_syntax:atom(Function), Args1),
+                Scopes1};
+        _ ->
+            io:format("TRACE ~p:~p DOT ~p~n",[?MODULE, ?LINE, error]),
+            {[], Scopes}
+    end,
+    case Context#js_context.global of
+        true->
+            {{[], #ast_info{global_asts = [Ast]}}, {Context, Scopes2}};
+        _ ->
+            {{Ast, #ast_info{}}, {Context, Scopes2}}
     end.
    
     
@@ -273,20 +295,7 @@ merge_info(Info1, Info2) ->
         global_asts = lists:merge(Info1#ast_info.global_asts, Info2#ast_info.global_asts)}. 
        
            
-check_call(console, log)  ->
+check_call(console, [log])  ->
     {erlyjs_api_console, log};
-
 check_call(_, _) ->
     error.
-            
-%% old snippet from Spidermonkey based version
-%%     
-%% body_ast({{'DOT',_}, Name, {{'NAME',_}, Class, Attr, Slot}}, Context) ->
-%%     case check_call(Class, Name) of
-%%         {Module, Function} ->
-%%             {erl_syntax:application(erl_syntax:atom(Module), erl_syntax:atom(Function), 
-%%                 Context#context.args), #info{}};
-%%         _ ->
-%%             io:format("TRACE ~p:~p DOT ~p~n",[?MODULE, ?LINE, error]),
-%%             {[], #info{}}
-%%     end;

@@ -181,19 +181,20 @@ LeftSideExpression -> CallExpression : '$1'.
 LeftSideExpression -> ShortNewExpression : '$1'.
 CallExpression -> PrimaryExpression : '$1'.
 CallExpression -> FullNewExpression : '$1'.
-CallExpression -> CallExpression MemberOperator : '$1'.
-CallExpression -> CallExpression Arguments : '$1'.
+CallExpression -> CallExpression MemberOperator : {'$1', list_third_el('$2')}.
+CallExpression -> CallExpression Arguments : {'$1', '$2'}.
 FullNewExpression -> new FullNewSubexpression Arguments : '$1'.
 ShortNewExpression -> new ShortNewSubexpression : '$1'.
 FullNewSubexpression -> PrimaryExpression : '$1'.
 FullNewSubexpression -> FullNewExpression : '$1'.
-FullNewSubexpression -> FullNewSubexpression MemberOperator : '$1'.
+FullNewSubexpression -> FullNewSubexpression MemberOperator : '$1' ++ ['$2'].
 ShortNewSubexpression -> FullNewSubexpression : '$1'.
 ShortNewSubexpression -> ShortNewExpression : '$1'.
 MemberOperator -> '[' Expression ']' : '$1'.
-MemberOperator -> '.' identifier : '$1'.
-Arguments -> '(' ')' : '$1'.
-Arguments -> '(' ArgumentList ')' : {'$2'}. 
+MemberOperator -> '.' identifier : ['$2'].
+MemberOperator ->  MemberOperator '.' identifier : '$1' ++ ['$3'].
+Arguments -> '(' ')' : {first_el('$1'), []}.
+Arguments -> '(' ArgumentList ')' : {first_el('$1'), '$2'}.
 ArgumentList -> AssignmentExpression : ['$1'].  
 ArgumentList -> ArgumentList ',' AssignmentExpression : '$1' ++ ['$3'].
 
@@ -404,3 +405,9 @@ TopStatement -> FunctionDefinition  : '$1'.
 
 
 Erlang code.
+
+first_el({First, _}) ->
+    First.
+    
+list_third_el(L) ->
+    [X || {identifier, _ , X} <- L].
