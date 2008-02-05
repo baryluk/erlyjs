@@ -40,6 +40,7 @@ Definitions.
 DIGIT = [0-9]
 U = [A-Z]
 L = [a-z]
+S = [_]
 WS = [\000-\s]
 
 STRING = "(\\\^.|\\.|[^"])*"
@@ -70,7 +71,7 @@ Rules.
 
 
 %% identifiers
-({L}|{U})* :                 Atom = list_to_atom(TokenChars),
+({L}|{U}|{S})* :             Atom = list_to_atom(TokenChars),
                              {token, case reserved_word(Atom) of
                                  true -> {Atom,TokenLine};
                                  false -> {identifier, TokenLine,Atom}

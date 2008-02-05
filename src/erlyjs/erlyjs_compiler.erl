@@ -51,7 +51,7 @@
     names = [],
     names_used_set = sets:new(),
     names_dict = dict:new()}).
-        
+ 
         
 compile(File, Module) ->
    compile(File, Module, {file, read_file}).
@@ -61,45 +61,52 @@ compile(File, Module, Reader) ->
     compile(File, Module, Reader, "ebin").
 
      
-compile(File, Module, Reader, OutDir) ->
-    case parse(File, Reader) of
-        {ok, JsParseTree} ->    
-            io:format("TRACE ~p:~p JsParseTree: ~p~n",[?MODULE, ?LINE, JsParseTree]),
-            try body_ast(JsParseTree, #js_context{reader = Reader}, [#scope{}]) of
-                {AstList, Info, _} ->                
-                    Forms = forms(Module, AstList, Info),  
-                    io:format("TRACE ~p:~p Forms: ~p~n",[?MODULE, ?LINE, Forms]),
-                    compile_forms(OutDir, Forms)                                      
-            catch 
-                throw:Error -> Error
+compile(File, Module, {M, F} = Reader, OutDir) ->
+    case catch M:F(File) of
+        {ok, Data} ->
+            crypto:start(),
+            CheckSum = binary_to_list(crypto:sha(Data)),
+            case parse(CheckSum, list_to_atom(Module), Data) of    
+                ok ->
+                    ok;
+                {ok, JsParseTree} ->
+                    io:format("TRACE ~p:~p JsParseTree: ~p~n",[?MODULE, ?LINE, JsParseTree]),
+                    try body_ast(JsParseTree, #js_context{reader = Reader}, [#scope{}]) of
+                        {AstList, Info, _} ->                
+                            Forms = forms(CheckSum, Module, AstList, Info),  
+                            io:format("TRACE ~p:~p Forms: ~p~n",[?MODULE, ?LINE, Forms]),
+                            compile_forms(OutDir, Forms)                                      
+                    catch 
+                        throw:Error -> Error
+                    end;
+                Error ->
+                    Error
             end;
-        Error ->
-            Error
-    end.            
+        _ ->
+            {error, "reading " ++ File ++ " failed "}
+    end.
+  
         		
 	
 %%====================================================================
 %% Internal functions
 %%====================================================================    
 
-scan(File, {Module, Function}) ->
-    case catch Module:Function(File) of
-        {ok, B} ->
-            erlyjs_lexer:string(binary_to_list(B));
+parse(CheckSum, Module, Data) ->
+    case catch Module:checksum() of
+        CheckSum ->   
+            ok;
         _ ->
-            {error, "reading " ++ File ++ " failed "}
-    end.
-
-
-parse(File, Reader) ->
-    case scan(File, Reader) of
-        {ok, Tokens, _} ->
-            erlyjs_parser:parse(Tokens);
-        Err ->
-            Err
+            case erlyjs_lexer:string(binary_to_list(Data)) of
+                {ok, Tokens, _} ->
+                    erlyjs_parser:parse(Tokens);
+                Err ->
+                    Err
+            end
     end.                                             
 
-forms(Module, FuncAsts, Info) ->
+
+forms(Checksum, Module, FuncAsts, Info) ->
     InitFuncAstBody = case Info#ast_info.global_asts of
         [] -> 
             [erl_syntax:tuple([erl_syntax:atom("error"),
@@ -109,6 +116,7 @@ forms(Module, FuncAsts, Info) ->
     end,
     InitFuncAst = erl_syntax:function(erl_syntax:atom("jsinit"),
         [erl_syntax:clause([], none, InitFuncAstBody)]),    
+        
     ResetFuncAstFunBodyCase = erl_syntax:application(erl_syntax:atom(string), 
         erl_syntax:atom(str), [erl_syntax:variable("KeyString"), erl_syntax:string("js_")]),
     ResetFuncAstFunBody = [
@@ -130,13 +138,18 @@ forms(Module, FuncAsts, Info) ->
             erl_syntax:application(none, erl_syntax:atom(get), [])]),
         erl_syntax:atom(ok)],
     ResetFuncAst = erl_syntax:function(erl_syntax:atom("jsreset"),
-       [erl_syntax:clause([], none, ResetFuncAstBody)]),                   
+       [erl_syntax:clause([], none, ResetFuncAstBody)]),
+    
+    ChecksumFuncAst = erl_syntax:function(erl_syntax:atom("checksum"),
+          [erl_syntax:clause([], none, [erl_syntax:string(Checksum)])]),
+                      
     ModuleAst = erl_syntax:attribute(erl_syntax:atom(module), [erl_syntax:atom(Module)]),
     ExportInit = erl_syntax:arity_qualifier(erl_syntax:atom("jsinit"), erl_syntax:integer(0)),
     ExportReset = erl_syntax:arity_qualifier(erl_syntax:atom("jsreset"), erl_syntax:integer(0)),
+    ExportChecksum = erl_syntax:arity_qualifier(erl_syntax:atom("checksum"), erl_syntax:integer(0)),
     ExportAst = erl_syntax:attribute(erl_syntax:atom(export),
-        [erl_syntax:list([ExportInit, ExportReset | Info#ast_info.export_asts])]),
-    [erl_syntax:revert(X) || X <- [ModuleAst, ExportAst, InitFuncAst, ResetFuncAst | FuncAsts]].
+        [erl_syntax:list([ExportInit, ExportReset, ExportChecksum | Info#ast_info.export_asts])]),
+    [erl_syntax:revert(X) || X <- [ModuleAst, ExportAst, InitFuncAst, ResetFuncAst, ChecksumFuncAst | FuncAsts]].
         
  
 compile_forms(OutDir, Forms) ->    
