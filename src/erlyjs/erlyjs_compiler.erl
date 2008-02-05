@@ -32,7 +32,7 @@
 -author('rsaccon@gmail.com').
 
 %% API
--export([compile/2, compile/3, compile/4]).
+-export([compile/2, compile/3]).
 
 
 -record(js_context, {
@@ -40,7 +40,9 @@
     args = [],
     api_namespace = [],
     reader = {file, read_file},
-    action = set}).
+    action = set,
+    force_recompile = false,
+    module = []}).
     
 -record(ast_info, {
     vars = [],
@@ -52,30 +54,27 @@
     names_used_set = sets:new(),
     names_dict = dict:new()}).
  
-        
+ 
 compile(File, Module) ->
-   compile(File, Module, {file, read_file}).
-
-
-compile(File, Module, Reader) ->
-    compile(File, Module, Reader, "ebin").
-
+    compile(File, Module, []).
      
-compile(File, Module, {M, F} = Reader, OutDir) ->
+compile(File, Module, Options) ->
+    Context = init_js_context(File, Module, Options),
+    {M, F} = Context#js_context.reader,
     case catch M:F(File) of
         {ok, Data} ->
             crypto:start(),
             CheckSum = binary_to_list(crypto:sha(Data)),
-            case parse(CheckSum, list_to_atom(Module), Data) of    
+            case parse(CheckSum, Data, Context) of    
                 ok ->
                     ok;
                 {ok, JsParseTree} ->
                     io:format("TRACE ~p:~p JsParseTree: ~p~n",[?MODULE, ?LINE, JsParseTree]),
-                    try body_ast(JsParseTree, #js_context{reader = Reader}, [#scope{}]) of
+                    try body_ast(JsParseTree, Context, [#scope{}]) of
                         {AstList, Info, _} ->                
                             Forms = forms(CheckSum, Module, AstList, Info),  
                             io:format("TRACE ~p:~p Forms: ~p~n",[?MODULE, ?LINE, Forms]),
-                            compile_forms(OutDir, Forms)                                      
+                            compile_forms(Forms, Options)                                      
                     catch 
                         throw:Error -> Error
                     end;
@@ -85,24 +84,38 @@ compile(File, Module, {M, F} = Reader, OutDir) ->
         _ ->
             {error, "reading " ++ File ++ " failed "}
     end.
-  
-        		
+  		
 	
 %%====================================================================
 %% Internal functions
 %%====================================================================    
 
-parse(CheckSum, Module, Data) ->
+init_js_context(_File, Module, Options) ->
+    Ctx = #js_context{},
+    #js_context{ 
+        module = list_to_atom(Module),
+        reader = proplists:get_value(reader, Options, Ctx#js_context.reader),
+        force_recompile = proplists:get_value(force_recompile, Options, Ctx#js_context.force_recompile)}.
+      
+        
+parse(Data) ->
+    case erlyjs_lexer:string(binary_to_list(Data)) of
+        {ok, Tokens, _} ->
+            erlyjs_parser:parse(Tokens);
+        Err ->
+            Err
+    end.
+        
+
+parse(_, Data, #js_context{force_recompile = true}) ->  
+    parse(Data);
+parse(CheckSum, Data, Context) ->
+    Module = Context#js_context.module,
     case catch Module:checksum() of
         CheckSum ->   
             ok;
         _ ->
-            case erlyjs_lexer:string(binary_to_list(Data)) of
-                {ok, Tokens, _} ->
-                    erlyjs_parser:parse(Tokens);
-                Err ->
-                    Err
-            end
+            parse(Data)
     end.                                             
 
 
@@ -152,9 +165,10 @@ forms(Checksum, Module, FuncAsts, Info) ->
     [erl_syntax:revert(X) || X <- [ModuleAst, ExportAst, InitFuncAst, ResetFuncAst, ChecksumFuncAst | FuncAsts]].
         
  
-compile_forms(OutDir, Forms) ->    
+compile_forms(Forms, Options) ->    
     case compile:forms(Forms) of
-        {ok, Module1, Bin} ->       
+        {ok, Module1, Bin} -> 
+            OutDir = proplists:get_value(out_dir, Options, "ebin"),           
             Path = filename:join([OutDir, atom_to_list(Module1) ++ ".beam"]),
             case file:write_file(Path, Bin) of
                 ok ->

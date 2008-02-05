@@ -65,7 +65,7 @@ run() ->
 %%====================================================================
 test(File) ->   
 	Module = filename:rootname(filename:basename(File)),
-	case erlyjs_compiler:compile(File, Module) of
+	case erlyjs_compiler:compile(File, Module, [{force_recompile, true}]) of
 	    ok ->
 	        M = list_to_atom(Module),
 	        Expected = M:js_test_result(),
