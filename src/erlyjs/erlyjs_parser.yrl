@@ -225,8 +225,8 @@ MultiplicativeExpression -> MultiplicativeExpression '/' UnaryExpression : {op, 
 
 %% Additive Operators
 AdditiveExpression -> MultiplicativeExpression : '$1'.
-AdditiveExpression -> AdditiveExpression '+' MultiplicativeExpression : {op, '+', '$1', '$3'}.
-AdditiveExpression -> AdditiveExpression '-' MultiplicativeExpression : {op, '-', '$1', '$3'}.
+AdditiveExpression -> AdditiveExpression '+' MultiplicativeExpression : {'$2', '$1', '$3'}.
+AdditiveExpression -> AdditiveExpression '-' MultiplicativeExpression : {'$2', '$1', '$3'}.
 
 %% Bitwise Shift Operators
 ShiftExpression -> AdditiveExpression : '$1'.

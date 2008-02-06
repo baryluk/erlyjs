@@ -45,7 +45,7 @@
 %% @end 
 %%--------------------------------------------------------------------
 run() ->    
-    Errs = filelib:fold_files(tests_dir(), "\.js$", false, fun
+    Errs = filelib:fold_files(tests_dir(), "\.js$", true, fun
             (File, Acc) ->
                 case test(File, false) of
                     ok -> Acc;

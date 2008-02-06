@@ -233,12 +233,13 @@ ast({{'=', _}, {identifier, _, Name}, Expression}, {Context, Scopes}) ->
     {RightAst, Info, _} = body_ast(Expression, Context, Scopes),   
     Ast = erl_syntax:match_expr(LeftAst, RightAst),  
     {{Ast, Info}, {Context, Scopes1}};   
-ast({op, '+', Left, Right}, {Context, Scopes}) ->     
-    {LeftAst, _, _} = body_ast(Left, Context, Scopes),  
-    {RightAst, _, _} = body_ast(Right, Context, Scopes),  
-    Ast = erl_syntax:infix_expr(LeftAst, erl_syntax:operator('+'), RightAst),
-    {{Ast, #ast_info{}}, {Context, Scopes}};      
-ast(Unknown, {Context, Scopes}) ->       
+ast({{'+' = Op, _}, L, R}, {Ctx, Scopes}) ->      
+    Ast = op(Op, body_ast(L, Ctx, Scopes), body_ast(R, Ctx, Scopes)),
+    {{Ast, #ast_info{}}, {Ctx, Scopes}};      
+ast({{'-' = Op, _}, L, R}, {Ctx, Scopes}) ->      
+    Ast = op(Op, body_ast(L, Ctx, Scopes), body_ast(R, Ctx, Scopes)),
+    {{Ast, #ast_info{}}, {Ctx, Scopes}};  
+ast(Unknown, {Context, Scopes}) ->
     io:format("TRACE ~p:~p Unknown: ~p~n",[?MODULE, ?LINE, Unknown]),
     empty_ast(Context, Scopes).
     
@@ -345,7 +346,15 @@ call(Name, MemberList, Args, Context, Scopes) ->
             {{Ast, #ast_info{}}, {Context, Scopes2}}
     end.
    
+
+op('+' = Op, {L, _, _}, {R, _, _}) ->
+    %% TODO: dynamic typechecking
+    erl_syntax:infix_expr(L, erl_syntax:operator(Op), R);
+op('-' = Op, {L, _, _}, {R, _, _}) ->
+    %% TODO: dynamic typechecking
+    erl_syntax:infix_expr(L, erl_syntax:operator(Op), R).
     
+        
 merge_info(Info1, Info2) ->
     #ast_info{
         export_asts = lists:merge(Info1#ast_info.export_asts, Info2#ast_info.export_asts),
