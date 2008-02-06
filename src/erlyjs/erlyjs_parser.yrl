@@ -219,8 +219,8 @@ UnaryExpression -> '!' UnaryExpression : '$1'.
 
 %% Multiplicative Operators
 MultiplicativeExpression -> UnaryExpression : '$1'.
-MultiplicativeExpression -> MultiplicativeExpression '*' UnaryExpression : {op, '*', '$1', '$3'}.
-MultiplicativeExpression -> MultiplicativeExpression '/' UnaryExpression : {op, '/', '$1', '$3'}.
+MultiplicativeExpression -> MultiplicativeExpression '*' UnaryExpression : {'$2', '$1', '$3'}.
+MultiplicativeExpression -> MultiplicativeExpression '/' UnaryExpression : {'$2', '$1', '$3'}.
 
 
 %% Additive Operators

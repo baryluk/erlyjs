@@ -45,25 +45,21 @@
 %% @end 
 %%--------------------------------------------------------------------
 run() ->    
-    Errs = filelib:fold_files(tests_dir(), "\.js$", true, fun
-            (File, Acc) ->
-                case test(File, false) of
-                    ok -> Acc;
-                    {error, Reason} -> [{File, Reason} | Acc]
-                end
-        end, []),    
-    case Errs of
-        [] -> {ok, "Success, all regression tests passed"};
-        _ -> {error, Errs}
+    case fold_tests("\.js$", false) of
+        {N, []}->
+            Msg = lists:concat(["All ", N, " regression tests passed"]),
+            {ok, Msg};
+        {_, Errs} -> 
+            {error, Errs}
     end.
     
     
 test(Name) ->
     case make:all([load]) of
         up_to_date ->
-            %% test(filename:join([tests_dir(), Name]) ++  ".js", true);
-            case fold_tests(Name ++ ".js") of
-                {1, []} -> {ok, "Success, regression test passed"};
+            case fold_tests(Name ++ ".js$", true) of
+                {0, _} -> {error, "Test not found: " ++ Name ++ ".js"};
+                {1, []} -> {ok, "Regression test passed"};
                 {1, Errs} -> {error, Errs};
                 {_, _} -> {error, "Testsuite requires different filename for each test"}
             end;
@@ -76,11 +72,11 @@ test(Name) ->
 %% Internal functions
 %%====================================================================
 
-fold_tests(RegExp) ->
-    filelib:fold_files(tests_dir(), RegExp, true, 
+fold_tests(RegExp, Verbose) ->
+    filelib:fold_files(test_doc_root(), RegExp, true, 
         fun
             (File, {AccCount, AccErrs}) ->
-                case test(File, true) of
+                case test(File, Verbose) of
                     ok -> 
                         {AccCount + 1, AccErrs};
                     {error, Reason} -> 
@@ -91,20 +87,30 @@ fold_tests(RegExp) ->
     
 test(File, Verbose) ->   
 	Module = filename:rootname(filename:basename(File)),
-	io:format("TRACE ~p:~p ~p~n",[?MODULE, ?LINE, File]),
-	io:format("TRACE ~p:~p ~p~n",[?MODULE, ?LINE, Module]),
 	case erlyjs_compiler:compile(File, Module, [{force_recompile, true}, {verbose, Verbose}]) of
 	    ok ->
 	        ProcessDict = get(),
 	        M = list_to_atom(Module),
-	        Expected = M:js_test_result(),
+	        Expected = case M:js_test_result() of
+	            Val when is_integer(Val) ->
+	                float(Val);
+	            Other ->
+	                Other
+	        end,
 	        Args = M:js_test_args(),
 	        M:jsinit(),
 	        Result = case catch apply(M, js_test, Args) of
 	            Expected -> 
 	                ok;
-	            Other ->
-	                {error, "test failed: " ++ Module ++ " Result: " ++ Other}
+	            Val1 when is_integer(Val1) ->
+	                case float(Val1) of
+        	            Expected ->
+        	                ok;
+        	            Other1 ->
+        	                {error, "test failed: " ++ Module ++ " Result: " ++ Other1}
+        	        end;
+	            Other2 ->
+	                {error, "test failed: " ++ Module ++ " Result: " ++ Other2}
 	        end,
 	        M:jsreset(),
 	        case get() of
@@ -118,6 +124,6 @@ test(File, Verbose) ->
 	end.
 	
 	
-tests_dir() ->
+test_doc_root() ->
     {file, Ebin} = code:is_loaded(?MODULE),
     filename:join([filename:dirname(filename:dirname(Ebin)), "src", "tests"]).
