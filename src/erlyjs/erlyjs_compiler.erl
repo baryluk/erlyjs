@@ -205,8 +205,12 @@ body_ast(JsParseTree, Context, Scopes) when is_list(JsParseTree) ->
 body_ast(JsParseTree, Context, Scopes) ->
     {{Ast, Info}, {_, Scopes1}} = ast(JsParseTree, {Context, Scopes}),
     {Ast, Info, Scopes1}.
-    
 
+
+ast({identifier, _L, true}, {Context, Scopes}) -> 
+    {{erl_syntax:atom(true), #ast_info{}}, {Context, Scopes}};
+ast({identifier, _L, false}, {Context, Scopes}) -> 
+    {{erl_syntax:atom(false), #ast_info{}}, {Context, Scopes}};    
 ast({integer, _L, Value}, {Context, Scopes}) -> 
     {{erl_syntax:integer(Value), #ast_info{}}, {Context, Scopes}};
 ast({string, _L, Value}, {Context, Scopes}) -> 
@@ -251,6 +255,18 @@ ast({{'+' = Op, _}, L, R}, {Ctx, Scopes}) ->
 ast({{'-' = Op, _}, L, R}, {Ctx, Scopes}) ->      
     Ast = op(Op, body_ast(L, Ctx, Scopes), body_ast(R, Ctx, Scopes)),
     {{Ast, #ast_info{}}, {Ctx, Scopes}};        
+ast({{'<' = Op, _}, L, R}, {Ctx, Scopes}) ->      
+    Ast = op(Op, body_ast(L, Ctx, Scopes), body_ast(R, Ctx, Scopes)),
+    {{Ast, #ast_info{}}, {Ctx, Scopes}};
+ast({{'>' = Op, _}, L, R}, {Ctx, Scopes}) ->      
+    Ast = op(Op, body_ast(L, Ctx, Scopes), body_ast(R, Ctx, Scopes)),
+    {{Ast, #ast_info{}}, {Ctx, Scopes}};      
+ast({{'<=' = Op, _}, L, R}, {Ctx, Scopes}) ->      
+    Ast = op(Op, body_ast(L, Ctx, Scopes), body_ast(R, Ctx, Scopes)),
+    {{Ast, #ast_info{}}, {Ctx, Scopes}};    
+ast({{'>=' = Op, _}, L, R}, {Ctx, Scopes}) ->      
+    Ast = op(Op, body_ast(L, Ctx, Scopes), body_ast(R, Ctx, Scopes)),
+    {{Ast, #ast_info{}}, {Ctx, Scopes}};    
 ast(Unknown, {Context, Scopes}) ->
     io:format("TRACE ~p:~p Unknown: ~p~n",[?MODULE, ?LINE, Unknown]),
     empty_ast(Context, Scopes).
@@ -375,7 +391,19 @@ op('<<', {L, _, _}, {R, _, _}) ->
     erl_syntax:infix_expr(L, erl_syntax:operator("bsl"), R);
 op('>>', {L, _, _}, {R, _, _}) ->
     %% TODO: dynamic typechecking
-    erl_syntax:infix_expr(L, erl_syntax:operator("bsr"), R).    
+    erl_syntax:infix_expr(L, erl_syntax:operator("bsr"), R);    
+op('<' = Op, {L, _, _}, {R, _, _}) ->
+    %% TODO: dynamic typechecking
+    erl_syntax:infix_expr(L, erl_syntax:operator(Op), R);
+op('>' = Op, {L, _, _}, {R, _, _}) ->
+    %% TODO: dynamic typechecking
+    erl_syntax:infix_expr(L, erl_syntax:operator(Op), R);
+op('<=', {L, _, _}, {R, _, _}) ->
+    %% TODO: dynamic typechecking
+    erl_syntax:infix_expr(L, erl_syntax:operator('=<'), R);
+op('>=' = Op, {L, _, _}, {R, _, _}) ->
+    %% TODO: dynamic typechecking
+    erl_syntax:infix_expr(L, erl_syntax:operator(Op), R).
     
         
 merge_info(Info1, Info2) ->

@@ -87,30 +87,26 @@ fold_tests(RegExp, Verbose) ->
     
 test(File, Verbose) ->   
 	Module = filename:rootname(filename:basename(File)),
-	case erlyjs_compiler:compile(File, Module, [{force_recompile, true}, {verbose, Verbose}]) of
+	Options = [{force_recompile, true}, {verbose, Verbose}],
+	case erlyjs_compiler:compile(File, Module, Options) of
 	    ok ->
 	        ProcessDict = get(),
 	        M = list_to_atom(Module),
-	        Expected = case M:js_test_result() of
-	            Val when is_integer(Val) ->
-	                float(Val);
-	            Other ->
-	                Other
-	        end,
+	        Expected = M:js_test_result(),
 	        Args = M:js_test_args(),
 	        M:jsinit(),
 	        Result = case catch apply(M, js_test, Args) of
 	            Expected -> 
 	                ok;
-	            Val1 when is_integer(Val1) ->
-	                case float(Val1) of
-        	            Expected ->
+	            Val when is_number(Val) ->
+	                case Expected == Val of
+        	            true ->
         	                ok;
-        	            Other1 ->
-        	                {error, "test failed: " ++ Module ++ " Result: " ++ Other1}
+        	            _ ->
+        	                {error, "test failed: " ++ Module ++ " Result: " ++ Val}
         	        end;
-	            Other2 ->
-	                {error, "test failed: " ++ Module ++ " Result: " ++ Other2}
+	            Other ->
+	                {error, "test failed: " ++ Module ++ " Result: " ++ Other}
 	        end,
 	        M:jsreset(),
 	        case get() of

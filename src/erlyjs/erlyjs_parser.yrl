@@ -199,12 +199,12 @@ ArgumentList -> AssignmentExpression : ['$1'].
 ArgumentList -> ArgumentList ',' AssignmentExpression : '$1' ++ ['$3'].
 
 
-%% Postfix Operators 
+%% Postfix Operators % TODO
 PostfixExpression -> LeftSideExpression : '$1'.
 PostfixExpression -> LeftSideExpression '++' : '$1'. 
 PostfixExpression -> LeftSideExpression '--' : '$1'.
 
-%% Unary Operators
+%% Unary Operators % TODO
 UnaryExpression -> PostfixExpression : '$1'.
 UnaryExpression -> delete LeftSideExpression : '$1'.
 UnaryExpression -> void UnaryExpression : '$1'.
@@ -234,14 +234,14 @@ ShiftExpression -> ShiftExpression '<<' AdditiveExpression : {'$2', '$1', '$3'}.
 ShiftExpression -> ShiftExpression '>>' AdditiveExpression : {'$2', '$1', '$3'}.
 ShiftExpression -> ShiftExpression '>>>' AdditiveExpression : '$1'. % TODO
 
-%% Relational Operators TODO
+%% Relational Operators
 RelationalExpression -> ShiftExpression : '$1'.
-RelationalExpression -> RelationalExpression '<' ShiftExpression : '$1'.
-RelationalExpression -> RelationalExpression '>' ShiftExpression : '$1'.
-RelationalExpression -> RelationalExpression '<=' ShiftExpression : '$1'.
-RelationalExpression -> RelationalExpression '>=' ShiftExpression  : '$1'.
-RelationalExpression -> RelationalExpression instanceof ShiftExpression : '$1'.
-RelationalExpression -> RelationalExpression in ShiftExpression  : '$1'. 
+RelationalExpression -> RelationalExpression '<' ShiftExpression : {'$2', '$1', '$3'}.
+RelationalExpression -> RelationalExpression '>' ShiftExpression : {'$2', '$1', '$3'}.
+RelationalExpression -> RelationalExpression '<=' ShiftExpression : {'$2', '$1', '$3'}.
+RelationalExpression -> RelationalExpression '>=' ShiftExpression  : {'$2', '$1', '$3'}.
+RelationalExpression -> RelationalExpression instanceof ShiftExpression : '$1'. % TODO
+RelationalExpression -> RelationalExpression in ShiftExpression  : '$1'.  % TODO
 
 %% Equality Operators TODO
 EqualityExpression -> RelationalExpression : '$1'.
