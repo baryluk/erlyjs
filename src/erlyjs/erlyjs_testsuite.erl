@@ -53,7 +53,7 @@ run() ->
                 end
         end, []),    
     case Errs of
-        [] -> {ok, "Success, all regression tests have passed"};
+        [] -> {ok, "Success, all regression tests passed"};
         _ -> {error, Errs}
     end.
     
@@ -61,7 +61,12 @@ run() ->
 test(Name) ->
     case make:all([load]) of
         up_to_date ->
-            test(filename:join([tests_dir(), Name]) ++  ".js", true);
+            %% test(filename:join([tests_dir(), Name]) ++  ".js", true);
+            case fold_tests(Name ++ ".js") of
+                {1, []} -> {ok, "Success, regression test passed"};
+                {1, Errs} -> {error, Errs};
+                {_, _} -> {error, "Testsuite requires different filename for each test"}
+            end;
         _ ->
             {error, "ErlyJS library compilation failed"}
     end.
@@ -70,8 +75,24 @@ test(Name) ->
 %%====================================================================
 %% Internal functions
 %%====================================================================
+
+fold_tests(RegExp) ->
+    filelib:fold_files(tests_dir(), RegExp, true, 
+        fun
+            (File, {AccCount, AccErrs}) ->
+                case test(File, true) of
+                    ok -> 
+                        {AccCount + 1, AccErrs};
+                    {error, Reason} -> 
+                        {AccCount + 1, [{File, Reason} | AccErrs]}
+                end
+        end, {0, []}).    
+
+    
 test(File, Verbose) ->   
 	Module = filename:rootname(filename:basename(File)),
+	io:format("TRACE ~p:~p ~p~n",[?MODULE, ?LINE, File]),
+	io:format("TRACE ~p:~p ~p~n",[?MODULE, ?LINE, Module]),
 	case erlyjs_compiler:compile(File, Module, [{force_recompile, true}, {verbose, Verbose}]) of
 	    ok ->
 	        ProcessDict = get(),
