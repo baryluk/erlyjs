@@ -33,7 +33,7 @@
 -author('rsaccon@gmail.com').
 
 %% API
--export([run/0]).
+-export([run/0, test/1]).
 
 %%====================================================================
 %% API
@@ -45,11 +45,9 @@
 %% @end 
 %%--------------------------------------------------------------------
 run() ->    
-    {file, Ebin} = code:is_loaded(?MODULE),
-    Dir = filename:join([filename:dirname(filename:dirname(Ebin)), "src", "tests"]),
-    Errs = filelib:fold_files(Dir, "\.js$", false, fun
+    Errs = filelib:fold_files(tests_dir(), "\.js$", false, fun
             (File, Acc) ->
-                case test(File) of
+                case test2(File) of
                     ok -> Acc;
                     {error, Reason} -> [Reason | Acc]
                 end
@@ -58,24 +56,42 @@ run() ->
         [] -> ok;
         _ -> {error, Errs}
     end.
+    
+    
+test(Name) ->
+    test2(filename:join([tests_dir(), Name]) ++  ".js").    
  
 	
 %%====================================================================
 %% Internal functions
 %%====================================================================
-test(File) ->   
+test2(File) ->   
 	Module = filename:rootname(filename:basename(File)),
 	case erlyjs_compiler:compile(File, Module, [{force_recompile, true}]) of
 	    ok ->
+	        ProcessDict = get(),
 	        M = list_to_atom(Module),
 	        Expected = M:js_test_result(),
 	        Args = M:js_test_args(),
-	        case catch apply(M, js_test, Args) of
-	            Expected ->
+	        M:jsinit(),
+	        Result = case catch apply(M, js_test, Args) of
+	            Expected -> 
 	                ok;
 	            Other ->
 	                {error, "test failed: " ++ Module ++ " Result: " ++ Other}
-	        end;
+	        end,
+	        M:jsreset(),
+	        case get() of
+	            ProcessDict ->
+	                Result;
+	            _ ->
+	                {error, "test failed: " ++ Module ++ " (dirty Process Dictionary)"}
+	        end;	                
 	    Err ->
 	       Err 
 	end.
+	
+	
+tests_dir() ->
+    {file, Ebin} = code:is_loaded(?MODULE),
+    filename:join([filename:dirname(filename:dirname(Ebin)), "src", "tests"]).

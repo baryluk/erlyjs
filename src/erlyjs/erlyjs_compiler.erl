@@ -123,7 +123,7 @@ forms(Checksum, Module, FuncAsts, Info) ->
     InitFuncAstBody = case Info#ast_info.global_asts of
         [] -> 
             [erl_syntax:tuple([erl_syntax:atom("error"),
-                erl_syntax:string("no global executable code")])];
+                erl_syntax:atom("no_global_code")])];
         List -> 
             lists:reverse([erl_syntax:atom(ok) | lists:reverse(List)]) 
     end,
@@ -242,19 +242,18 @@ var_name(Name, #js_context{action = get} = Context, Scopes) ->
             throw({error, lists:concat(["ReferenceError: ", Name, " is not defined"])});
         {global, Name1, Scopes1} ->
             Args = [erl_syntax:atom(Name1)], 
-            Ast = erl_syntax:applciation(none, erl_syntax:atom(get), Args),
+            Ast = erl_syntax:application(none, erl_syntax:atom(get), Args),
             {{Ast, #ast_info{}}, {Context, Scopes1}};
         {Name1, Scopes1} ->
             {{erl_syntax:variable(Name1), #ast_info{}}, {Context, Scopes1}}
     end.
        
 var_init(Name, Value, Context, [GlobalScope]) ->
-    Name1 = lists:concat(["js_", Name]),
-    Names = lists:usort([Name1 | GlobalScope#scope.names]),
-    Dict = dict:store(Name, Name1, GlobalScope#scope.names_dict),
+    Names = lists:usort([js_name(Name) | GlobalScope#scope.names]),
+    Dict = dict:store(Name, js_name(Name), GlobalScope#scope.names_dict),
     GlobalScope1 = #scope{names = Names, names_dict = Dict},
     {ValueAst, Info1, Scopes2} = body_ast(Value, Context, [GlobalScope1]),
-    Args = [erl_syntax:atom(Name1), ValueAst], 
+    Args = [erl_syntax:atom(js_name(Name)), ValueAst], 
     Ast = erl_syntax:application(none, erl_syntax:atom(put), Args), 
     Asts = [Ast | Info1#ast_info.global_asts],
     {{[], Info1#ast_info{global_asts = Asts}}, {Context, Scopes2}};  
@@ -273,7 +272,7 @@ name_search(Name, [H | T], Acc) ->
             Scopes = lists:merge(lists:reverse(Acc), [H | T]),
             case T of
                 [] ->
-                    {gloabl, Value, Scopes};
+                    {global, Value, Scopes};
                 _ ->
                     {Value, Scopes}
             end;
@@ -282,20 +281,21 @@ name_search(Name, [H | T], Acc) ->
     end.
              
             
-func(Name, Params, Body, Context, Scopes) ->  
-    Name1 = "js_" ++ atom_to_list(Name), 
-    {Params1, _, Scopes1} = body_ast(Params, Context, [#scope{} | Scopes]),          
-    {Ast, Info, Scopes2} = body_ast(Body, Context#js_context{global = false}, Scopes1),
-    Ast1 = erl_syntax:function(erl_syntax:atom(Name1),
+func(Name, Params, Body, Context, Scopes) -> 
+    {Params1, _, _} = body_ast(Params, Context, Scopes),          
+    {Ast, Info, _} = body_ast(Body, Context#js_context{global = false}, push(Scopes)),
+    Ast1 = erl_syntax:function(erl_syntax:atom(js_name(Name)),
         [erl_syntax:clause(Params1, none, Ast)]),
     case Context#js_context.global of
         true->
-            Export = erl_syntax:arity_qualifier(erl_syntax:atom(Name1), erl_syntax:integer(length(Params))),
+            Export = erl_syntax:arity_qualifier(erl_syntax:atom(js_name(Name)), 
+                erl_syntax:integer(length(Params))),
             Exports = [Export | Info#ast_info.export_asts], 
-            {{Ast1, Info#ast_info{export_asts = Exports}}, {Context, Scopes2}};
+            {{Ast1, Info#ast_info{export_asts = Exports}}, {Context, Scopes}};
         _ ->
-            {{Ast1, Info}, {Context, Scopes2}}
+            {{Ast1, Info}, {Context, Scopes}}
     end.
+
 
     
 call(Name, MemberList, Args, Context, Scopes) ->
@@ -320,8 +320,16 @@ merge_info(Info1, Info2) ->
     #ast_info{
         export_asts = lists:merge(Info1#ast_info.export_asts, Info2#ast_info.export_asts),
         global_asts = lists:merge(Info1#ast_info.global_asts, Info2#ast_info.global_asts)}. 
-       
-           
+    
+
+
+js_name(Name) ->
+    lists:concat(["js_", Name]).
+            
+push(Scopes) ->
+    [#scope{} | Scopes].
+    
+               
 check_call(console, [log])  ->
     {erlyjs_api_console, log};
 check_call(_, _) ->
