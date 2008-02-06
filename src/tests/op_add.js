@@ -1,5 +1,5 @@
 function test_description() {
-    return "Simple local variable test";
+    return "Add (+) operator test";
 }
 
 function test_args() {
@@ -7,11 +7,11 @@ function test_args() {
 }
 
 function test_result() {
-    return 5;
+    return 3;
 }
 
 function test() {
-    var a;
-    a = 5;
-    return a;
+    var a=1, b=2, c;
+    c = a + b;
+    return c;
 }

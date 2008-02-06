@@ -47,27 +47,32 @@
 run() ->    
     Errs = filelib:fold_files(tests_dir(), "\.js$", false, fun
             (File, Acc) ->
-                case test2(File) of
+                case test(File, false) of
                     ok -> Acc;
-                    {error, Reason} -> [Reason | Acc]
+                    {error, Reason} -> [{File, Reason} | Acc]
                 end
         end, []),    
     case Errs of
-        [] -> ok;
+        [] -> {ok, "Success, all regression tests have passed"};
         _ -> {error, Errs}
     end.
     
     
 test(Name) ->
-    test2(filename:join([tests_dir(), Name]) ++  ".js").    
+    case make:all([load]) of
+        up_to_date ->
+            test(filename:join([tests_dir(), Name]) ++  ".js", true);
+        _ ->
+            {error, "ErlyJS library compilation failed"}
+    end.
  
 	
 %%====================================================================
 %% Internal functions
 %%====================================================================
-test2(File) ->   
+test(File, Verbose) ->   
 	Module = filename:rootname(filename:basename(File)),
-	case erlyjs_compiler:compile(File, Module, [{force_recompile, true}]) of
+	case erlyjs_compiler:compile(File, Module, [{force_recompile, true}, {verbose, Verbose}]) of
 	    ok ->
 	        ProcessDict = get(),
 	        M = list_to_atom(Module),

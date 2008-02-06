@@ -36,13 +36,15 @@
 
 
 -record(js_context, {
+    out_dir = "ebin",
     global = true,   
     args = [],
     api_namespace = [],
     reader = {file, read_file},
-    action = set,
+    action = get,
     force_recompile = false,
-    module = []}).
+    module = [],
+    verbose = false}).
     
 -record(ast_info, {
     vars = [],
@@ -69,12 +71,12 @@ compile(File, Module, Options) ->
                 ok ->
                     ok;
                 {ok, JsParseTree} ->
-                    io:format("TRACE ~p:~p JsParseTree: ~p~n",[?MODULE, ?LINE, JsParseTree]),
+                    trace(?MODULE, ?LINE, "JsParseTree", JsParseTree, Context),
                     try body_ast(JsParseTree, Context, [#scope{}]) of
                         {AstList, Info, _} ->                
                             Forms = forms(CheckSum, Module, AstList, Info),  
-                            io:format("TRACE ~p:~p Forms: ~p~n",[?MODULE, ?LINE, Forms]),
-                            compile_forms(Forms, Options)                                      
+                            trace(?MODULE, ?LINE, "Forms", Forms, Context),
+                            compile_forms(Forms, Context)                                      
                     catch 
                         throw:Error -> Error
                     end;
@@ -94,6 +96,8 @@ init_js_context(_File, Module, Options) ->
     Ctx = #js_context{},
     #js_context{ 
         module = list_to_atom(Module),
+        out_dir = proplists:get_value(out_dir, Options,  Ctx#js_context.out_dir),
+        verbose = proplists:get_value(verbose, Options, Ctx#js_context.verbose),
         reader = proplists:get_value(reader, Options, Ctx#js_context.reader),
         force_recompile = proplists:get_value(force_recompile, Options, Ctx#js_context.force_recompile)}.
       
@@ -165,11 +169,16 @@ forms(Checksum, Module, FuncAsts, Info) ->
     [erl_syntax:revert(X) || X <- [ModuleAst, ExportAst, InitFuncAst, ResetFuncAst, ChecksumFuncAst | FuncAsts]].
         
  
-compile_forms(Forms, Options) ->    
-    case compile:forms(Forms) of
-        {ok, Module1, Bin} -> 
-            OutDir = proplists:get_value(out_dir, Options, "ebin"),           
-            Path = filename:join([OutDir, atom_to_list(Module1) ++ ".beam"]),
+compile_forms(Forms, Context) ->  
+    Options = case Context#js_context.verbose of
+        true ->
+            [verbose,report_errors,report_warnings];
+        _ ->
+            []
+    end,  
+    case compile:forms(Forms, Options) of
+        {ok, Module1, Bin} ->           
+            Path = filename:join([Context#js_context.out_dir, atom_to_list(Module1) ++ ".beam"]),
             case file:write_file(Path, Bin) of
                 ok ->
                     code:purge(Module1),
@@ -207,18 +216,28 @@ ast({identifier, _L, Name}, {Context, Scopes}) ->
 ast({{identifier, _L, Name}, Value}, {Context, Scopes}) ->  
     var_init(Name, Value, Context, Scopes);             
 ast({{var, _L}, DeclarationList}, {Context, Scopes}) ->
-    {Ast, Info, Scopes1} = body_ast(DeclarationList, Context, Scopes),
-    {{Ast, Info}, {Context, Scopes1}}; 
+    {Ast, Info, Scopes1} = body_ast(DeclarationList, Context#js_context{action = set}, Scopes),
+    {{Ast, Info}, {Context, Scopes1}};
 ast({return, _L}, {Context, Scopes}) -> 
     %% TODO: add grammar rule and logic
     empty_ast(Context, Scopes);
 ast({{return, _L}, Expression}, {Context, Scopes}) -> 
     %% TODO: evaluate Expression, not just variable, add logic
-    ast(Expression, {Context#js_context{action = get}, Scopes});
+    ast(Expression, {Context, Scopes});
 ast({{function, _L1}, {identifier, _L2, Name}, {params, Params, body, Body}}, {Context, Scopes}) ->
     func(Name, Params, Body, Context, Scopes);      
 ast({{{identifier, _L, Name}, MemberList}, {'(', Args}}, {Context, Scopes}) ->
     call(Name, MemberList, Args, Context, Scopes);
+ast({{'=', _}, {identifier, _, Name}, Expression}, {Context, Scopes}) ->  
+    {{LeftAst, _}, {_, Scopes1}} = var_name(Name, Context#js_context{action = set}, Scopes),  
+    {RightAst, Info, _} = body_ast(Expression, Context, Scopes),   
+    Ast = erl_syntax:match_expr(LeftAst, RightAst),  
+    {{Ast, Info}, {Context, Scopes1}};   
+ast({op, '+', Left, Right}, {Context, Scopes}) ->     
+    {LeftAst, _, _} = body_ast(Left, Context, Scopes),  
+    {RightAst, _, _} = body_ast(Right, Context, Scopes),  
+    Ast = erl_syntax:infix_expr(LeftAst, erl_syntax:operator('+'), RightAst),
+    {{Ast, #ast_info{}}, {Context, Scopes}};      
 ast(Unknown, {Context, Scopes}) ->       
     io:format("TRACE ~p:~p Unknown: ~p~n",[?MODULE, ?LINE, Unknown]),
     empty_ast(Context, Scopes).
@@ -247,7 +266,14 @@ var_name(Name, #js_context{action = get} = Context, Scopes) ->
         {Name1, Scopes1} ->
             {{erl_syntax:variable(Name1), #ast_info{}}, {Context, Scopes1}}
     end.
-       
+
+var_init(Name, [], Context, [GlobalScope]) ->      
+    Names = lists:usort([js_name(Name) | GlobalScope#scope.names]),
+    Dict = dict:store(Name, js_name(Name), GlobalScope#scope.names_dict),
+    GlobalScope1 = #scope{names = Names, names_dict = Dict},
+    Args = [erl_syntax:atom(js_name(Name)), erl_syntax:atom(declared)], 
+    Ast = erl_syntax:application(none, erl_syntax:atom(put), Args), 
+    {{[], #ast_info{global_asts = [Ast]}}, {Context, [GlobalScope1]}}; 
 var_init(Name, Value, Context, [GlobalScope]) ->
     Names = lists:usort([js_name(Name) | GlobalScope#scope.names]),
     Dict = dict:store(Name, js_name(Name), GlobalScope#scope.names_dict),
@@ -257,6 +283,10 @@ var_init(Name, Value, Context, [GlobalScope]) ->
     Ast = erl_syntax:application(none, erl_syntax:atom(put), Args), 
     Asts = [Ast | Info1#ast_info.global_asts],
     {{[], Info1#ast_info{global_asts = Asts}}, {Context, Scopes2}};  
+var_init(Name, [], Context, Scopes) ->
+    {{AstVariable, _}, {_, Scopes1}}  = var_name(Name, Context, Scopes),
+    Ast = erl_syntax:match_expr(AstVariable, erl_syntax:atom(declared)),  
+    {{Ast, #ast_info{}}, {Context, Scopes1}};  
 var_init(Name, Value, Context, Scopes) ->
     {{AstVariable, _}, {_, Scopes1}}  = var_name(Name, Context, Scopes),
     {AstValue, Info, Scopes2} = body_ast(Value, Context, Scopes1),
@@ -334,3 +364,12 @@ check_call(console, [log])  ->
     {erlyjs_api_console, log};
 check_call(_, _) ->
     error.
+    
+    
+trace(Module, Line, Title, Content, Context) ->
+    case Context#js_context.verbose of
+        true ->
+            io:format("TRACE ~p:~p ~p: ~p~n",[Module, Line, Title, Content]);
+        _ ->
+            ok
+    end.

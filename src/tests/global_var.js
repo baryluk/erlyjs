@@ -15,5 +15,6 @@ function test_result() {
 var a = 5;
 
 function test() {
+    var b;
     return a;
 }
