@@ -1,5 +1,5 @@
 function test_description() {
-    return "Divide (/) operator test";
+    return "Divide '/' operator test";
 }
 
 function test_args() {

@@ -239,6 +239,12 @@ ast({{'*' = Op, _}, L, R}, {Ctx, Scopes}) ->
 ast({{'/' = Op, _}, L, R}, {Ctx, Scopes}) ->      
     Ast = op(Op, body_ast(L, Ctx, Scopes), body_ast(R, Ctx, Scopes)),
     {{Ast, #ast_info{}}, {Ctx, Scopes}};
+ast({{'<<' = Op, _}, L, R}, {Ctx, Scopes}) ->      
+    Ast = op(Op, body_ast(L, Ctx, Scopes), body_ast(R, Ctx, Scopes)),
+    {{Ast, #ast_info{}}, {Ctx, Scopes}};      
+ast({{'>>' = Op, _}, L, R}, {Ctx, Scopes}) ->      
+    Ast = op(Op, body_ast(L, Ctx, Scopes), body_ast(R, Ctx, Scopes)),
+    {{Ast, #ast_info{}}, {Ctx, Scopes}};
 ast({{'+' = Op, _}, L, R}, {Ctx, Scopes}) ->      
     Ast = op(Op, body_ast(L, Ctx, Scopes), body_ast(R, Ctx, Scopes)),
     {{Ast, #ast_info{}}, {Ctx, Scopes}};      
@@ -363,7 +369,13 @@ op('+' = Op, {L, _, _}, {R, _, _}) ->
     erl_syntax:infix_expr(L, erl_syntax:operator(Op), R);
 op('-' = Op, {L, _, _}, {R, _, _}) ->
     %% TODO: dynamic typechecking
-    erl_syntax:infix_expr(L, erl_syntax:operator(Op), R).
+    erl_syntax:infix_expr(L, erl_syntax:operator(Op), R);
+op('<<', {L, _, _}, {R, _, _}) ->
+    %% TODO: dynamic typechecking
+    erl_syntax:infix_expr(L, erl_syntax:operator("bsl"), R);
+op('>>', {L, _, _}, {R, _, _}) ->
+    %% TODO: dynamic typechecking
+    erl_syntax:infix_expr(L, erl_syntax:operator("bsr"), R).    
     
         
 merge_info(Info1, Info2) ->

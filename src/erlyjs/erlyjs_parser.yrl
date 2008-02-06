@@ -230,9 +230,9 @@ AdditiveExpression -> AdditiveExpression '-' MultiplicativeExpression : {'$2', '
 
 %% Bitwise Shift Operators
 ShiftExpression -> AdditiveExpression : '$1'.
-ShiftExpression -> ShiftExpression '<<' AdditiveExpression : {op, 'bsl', '$1', '$3'}.
-ShiftExpression -> ShiftExpression '>>' AdditiveExpression : {op, 'bsr', '$1', '$3'}.
-ShiftExpression -> ShiftExpression '>>>' AdditiveExpression : '$1'.
+ShiftExpression -> ShiftExpression '<<' AdditiveExpression : {'$2', '$1', '$3'}.
+ShiftExpression -> ShiftExpression '>>' AdditiveExpression : {'$2', '$1', '$3'}.
+ShiftExpression -> ShiftExpression '>>>' AdditiveExpression : '$1'. % TODO
 
 %% Relational Operators TODO
 RelationalExpression -> ShiftExpression : '$1'.

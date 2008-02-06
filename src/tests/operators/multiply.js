@@ -1,5 +1,5 @@
 function test_description() {
-    return "Multiply (+) operator test";
+    return "Multiply '+' operator test";
 }
 
 function test_args() {

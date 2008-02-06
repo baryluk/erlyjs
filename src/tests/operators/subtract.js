@@ -1,5 +1,5 @@
 function test_description() {
-    return "Subtract (-) operator test";
+    return "Subtract '-' operator test";
 }
 
 function test_args() {

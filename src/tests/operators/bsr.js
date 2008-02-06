@@ -1,5 +1,5 @@
 function test_description() {
-    return "Add '+' operator test";
+    return "Bitwise shift right '>>' operator test";
 }
 
 function test_args() {
@@ -7,11 +7,11 @@ function test_args() {
 }
 
 function test_result() {
-    return 3;
+    return 4;
 }
 
 function test() {
-    var a=1, b=2, c;
-    c = a + b;
+    var a=16, b=2, c;
+    c = a >> b;
     return c;
 }
