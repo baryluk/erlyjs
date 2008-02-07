@@ -1,3 +1,5 @@
+// Does currently not work becasue of a lexer problem with the '&' symbol
+
 function test_description() {
     return "Bitwise AND '&' operator test";
 }

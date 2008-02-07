@@ -45,7 +45,7 @@
 %% @end 
 %%--------------------------------------------------------------------
 run() ->    
-    case fold_tests("\.js$", false) of
+    case fold_tests("^[^(SKIP_)].+\.js$", false) of
         {N, []}->
             Msg = lists:concat(["All ", N, " regression tests passed"]),
             {ok, Msg};
