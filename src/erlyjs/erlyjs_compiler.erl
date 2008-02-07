@@ -225,10 +225,10 @@ ast({{identifier, _L, Name}, Value}, {Context, Scopes}) ->
 ast({{var, _L}, DeclarationList}, {Context, Scopes}) ->
     {Ast, Info, Scopes1} = body_ast(DeclarationList, Context#js_context{action = set}, Scopes),
     {{Ast, Info}, {Context, Scopes1}};
-ast({return, L}, {Context, Scopes}) -> 
+ast({return, _L}, {Context, Scopes}) -> 
     %% TODO: eliminate this clause by adjusting the grammar
     empty_ast(Context, Scopes);
-ast({{return, L}, Expression}, {Context, Scopes}) -> 
+ast({{return, _L}, Expression}, {Context, Scopes}) -> 
     %% TODO: implementation and tests, this just works for return ign literals
     ast(Expression, {Context, Scopes});
 ast({{function, _L1}, {identifier, _L2, Name}, {params, Params, body, Body}}, {Context, Scopes}) ->
@@ -296,7 +296,11 @@ ast({{'&&' = Op, _}, L, R}, {Ctx, Scopes}) ->
     {{Ast, #ast_info{}}, {Ctx, Scopes}};    
 ast({{'||' = Op, _}, L, R}, {Ctx, Scopes}) ->      
     Ast = op(Op, body_ast(L, Ctx, Scopes), body_ast(R, Ctx, Scopes)),
-    {{Ast, #ast_info{}}, {Ctx, Scopes}};      
+    {{Ast, #ast_info{}}, {Ctx, Scopes}};
+ast({'cond' = Op, Cond, Expr1, Expr2}, {Ctx, Scopes}) ->      
+    Ast = op(Op, body_ast(Cond, Ctx, Scopes), body_ast(Expr1, Ctx, Scopes), 
+        body_ast(Expr2, Ctx, Scopes)),
+    {{Ast, #ast_info{}}, {Ctx, Scopes}};     
 ast(Unknown, _) ->
     throw({error, lists:concat(["Unknown token: ", Unknown])}).
     
@@ -460,6 +464,12 @@ op('&&', {L, _, _}, {R, _, _}) ->
 op('||', {L, _, _}, {R, _, _}) ->
     %% TODO: dynamic typechecking
     erl_syntax:infix_expr(L, erl_syntax:operator('or'), R).
+    
+op('cond', {Cond, _, _}, {Expr1, _, _}, {Expr2, _, _}) ->
+    %% TODO: dynamic typechecking    
+    erl_syntax:case_expr(Cond, [
+        erl_syntax:clause([erl_syntax:atom(true)], none, [Expr1]),
+        erl_syntax:clause([erl_syntax:underscore()], none, [Expr2])]).
  
         
 merge_info(Info1, Info2) ->

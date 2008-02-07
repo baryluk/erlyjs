@@ -263,9 +263,9 @@ LogicalAndExpression -> LogicalAndExpression '&&' BitwiseOrExpression : {'$2', '
 LogicalOrExpression -> LogicalAndExpression : '$1'.
 LogicalOrExpression -> LogicalOrExpression '||' LogicalAndExpression : {'$2', '$1', '$3'}.
 
-%% Conditional Operator  TODO
+%% Conditional Operator
 ConditionalExpression -> LogicalOrExpression : '$1'.
-ConditionalExpression -> LogicalOrExpression '?' AssignmentExpression ':' AssignmentExpression : '$1'. 
+ConditionalExpression -> LogicalOrExpression '?' AssignmentExpression ':' AssignmentExpression : {cond, '$1', '$3', '$5'}. 
 
 %% Assignment Operators 
 AssignmentExpression -> ConditionalExpression : '$1'. 
