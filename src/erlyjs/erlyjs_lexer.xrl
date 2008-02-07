@@ -74,7 +74,7 @@ Rules.
 ({L}|{U}|{S})* :      Atom = list_to_atom(TokenChars),
                       {token, case reserved_word(Atom) of
                           true -> {Atom,TokenLine};
-                          false -> {identifier, TokenLine,Atom}
+                          false -> {identifier, TokenLine, Atom}
                       end}.
 
 %% ignore whitespaces

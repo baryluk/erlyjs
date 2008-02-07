@@ -50,10 +50,10 @@ create_parser() ->
     create_parser("src/erlyjs/erlyjs_parser", "ebin").
         
 lexer_src() ->
-     filename:join(src_erlyjs_dir(), "erlyjs_lexer.erl").
+     filename:join(src_erlyjs_dir(), "erlyjs_lexer.xrl").
 
 parser_src() ->
-     filename:join(src_erlyjs_dir(), "erlyjs_parser.erl").
+     filename:join(src_erlyjs_dir(), "erlyjs_parser.yrl").
      
         
 %%====================================================================

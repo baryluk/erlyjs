@@ -170,9 +170,8 @@ FieldList -> FieldList ',' LiteralField : '$1' ++ ['$3'].
 LiteralField -> identifier ':' AssignmentExpression : '$1'.
 
 %% Array Literals TODO
-ArrayLiteral -> '[' ']' : '$1'. 
-ArrayLiteral -> '[' ElementList ']' : '$1'.
-ElementList -> LiteralElement : ['$1'].
+ArrayLiteral -> '[' ElementList ']' : {'$1', '$2'}.
+ElementList -> '$empty' : [].
 ElementList -> ElementList ',' LiteralElement : '$1' ++ ['$3'].
 LiteralElement -> AssignmentExpression : '$1'.
 
@@ -243,14 +242,14 @@ RelationalExpression -> RelationalExpression '>=' ShiftExpression  : {'$2', '$1'
 RelationalExpression -> RelationalExpression instanceof ShiftExpression : '$1'. % TODO
 RelationalExpression -> RelationalExpression in ShiftExpression  : '$1'.  % TODO
 
-%% Equality Operators TODO
+%% Equality Operators
 EqualityExpression -> RelationalExpression : '$1'.
 EqualityExpression -> EqualityExpression '==' RelationalExpression : {'$2', '$1', '$3'}.
 EqualityExpression -> EqualityExpression '!=' RelationalExpression : {'$2', '$1', '$3'}.
 EqualityExpression -> EqualityExpression '===' RelationalExpression  : {'$2', '$1', '$3'}.
 EqualityExpression -> EqualityExpression '!==' RelationalExpression : {'$2', '$1', '$3'}.
 
-%% Binary Bitwise Operators  TODO (is currently wrong)
+%% Binary Bitwise Operators
 BitwiseAndExpression -> EqualityExpression : '$1'.
 BitwiseAndExpression -> BitwiseAndExpression '&' EqualityExpression : {'$2', '$1', '$3'}.
 BitwiseXorExpression -> BitwiseAndExpression : '$1'.
@@ -258,7 +257,7 @@ BitwiseXorExpression -> BitwiseXorExpression '^' BitwiseAndExpression : {'$2', '
 BitwiseOrExpression -> BitwiseXorExpression : '$1'.
 BitwiseOrExpression -> BitwiseOrExpression '|' BitwiseXorExpression : {'$2', '$1', '$3'}.
 
-%% Binary Logical Operators  TODO (is currently wrong)
+%% Binary Logical Operators
 LogicalAndExpression -> BitwiseOrExpression : '$1'.
 LogicalAndExpression -> LogicalAndExpression '&&' BitwiseOrExpression : {'$2', '$1', '$3'}.
 LogicalOrExpression -> LogicalAndExpression : '$1'.

@@ -215,6 +215,9 @@ ast({integer, _L, Value}, {Context, Scopes}) ->
     {{erl_syntax:integer(Value), #ast_info{}}, {Context, Scopes}};
 ast({string, _L, Value}, {Context, Scopes}) -> 
     {{erl_syntax:string(Value), #ast_info{}}, {Context, Scopes}}; %% TODO: binary
+ast({{'[', _L},  Value}, {Context, Scopes}) -> 
+    %% TODO: implementation and tests, this just works for empty lists
+    {{erl_syntax:list(Value), #ast_info{}}, {Context, Scopes}};
 ast({identifier, _L, Name}, {Context, Scopes}) ->  
     var_name(Name, Context, Scopes);
 ast({{identifier, _L, Name}, Value}, {Context, Scopes}) ->  
@@ -222,11 +225,11 @@ ast({{identifier, _L, Name}, Value}, {Context, Scopes}) ->
 ast({{var, _L}, DeclarationList}, {Context, Scopes}) ->
     {Ast, Info, Scopes1} = body_ast(DeclarationList, Context#js_context{action = set}, Scopes),
     {{Ast, Info}, {Context, Scopes1}};
-ast({return, _L}, {Context, Scopes}) -> 
-    %% TODO: add grammar rule and logic
+ast({return, L}, {Context, Scopes}) -> 
+    %% TODO: eliminate this clause by adjusting the grammar
     empty_ast(Context, Scopes);
-ast({{return, _L}, Expression}, {Context, Scopes}) -> 
-    %% TODO: evaluate Expression, not just variable, add logic
+ast({{return, L}, Expression}, {Context, Scopes}) -> 
+    %% TODO: implementation and tests, this just works for return ign literals
     ast(Expression, {Context, Scopes});
 ast({{function, _L1}, {identifier, _L2, Name}, {params, Params, body, Body}}, {Context, Scopes}) ->
     func(Name, Params, Body, Context, Scopes);      
