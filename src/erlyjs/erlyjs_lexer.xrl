@@ -81,7 +81,12 @@ Rules.
 {WS}+ :                      skip_token.
 
 %% special characters
-[]()[}{|!?/;:,.*+#<>=-^&] :  {token,{list_to_atom(TokenChars),TokenLine}}.
+[]()[}{!?/;:,.*+#<>=-] :  {token,{list_to_atom(TokenChars),TokenLine}}.
+
+%% special characters and single character operators
+\^ :                         {token,{'^',TokenLine}}.
+& :                          {token,{'&',TokenLine}}.
+\| :                         {token,{'|',TokenLine}}.
 
 %% multi character operators
 \+\+ :                       {token,{'++',TokenLine}}.
