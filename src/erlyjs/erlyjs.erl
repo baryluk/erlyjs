@@ -35,7 +35,7 @@
 
     
 %% API
--export([create_lexer/0, create_parser/0]).
+-export([create_lexer/0, create_parser/0, lexer_src/0, parser_src/0]).
 
 
 %%--------------------------------------------------------------------
@@ -43,16 +43,26 @@
 %% @doc creates the yecc-based ErlyJS parser
 %% @end 
 %%--------------------------------------------------------------------
+create_lexer() ->
+    create_lexer("src/erlyjs/erlyjs_lexer", "ebin").
+    
 create_parser() ->
     create_parser("src/erlyjs/erlyjs_parser", "ebin").
         
-create_lexer() ->
-    create_lexer("src/erlyjs/erlyjs_lexer", "ebin").
+lexer_src() ->
+     filename:join(src_erlyjs_dir(), "erlyjs_lexer.erl").
 
-
+parser_src() ->
+     filename:join(src_erlyjs_dir(), "erlyjs_parser.erl").
+     
+        
 %%====================================================================
 %% Internal functions
 %%====================================================================
+
+src_erlyjs_dir() ->
+     {file, Ebin} = code:is_loaded(?MODULE),
+     filename:join([filename:dirname(filename:dirname(Ebin)), "src", "erlyjs"]).
 
 create_lexer(Path, Outdir) ->
     case leex:file(Path) of

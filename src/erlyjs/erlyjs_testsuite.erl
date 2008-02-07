@@ -33,7 +33,7 @@
 -author('rsaccon@gmail.com').
 
 %% API
--export([run/0, test/1]).
+-export([run/0, run/1]).
 
 %%====================================================================
 %% API
@@ -45,35 +45,77 @@
 %% @end 
 %%--------------------------------------------------------------------
 run() ->    
-    case fold_tests("^[^(SKIP_)].+\.js$", false) of
-        {N, []}->
-            Msg = lists:concat(["All ", N, " regression tests passed"]),
-            {ok, Msg};
-        {_, Errs} -> 
-            {error, Errs}
-    end.
-    
-    
-test(Name) ->
-    case make:all([load]) of
-        up_to_date ->
-            case fold_tests("^" ++ Name ++ "\.js$", true) of
-                {0, _} -> {error, "Test not found: " ++ Name ++ ".js"};
-                {1, []} -> {ok, "Regression test passed"};
-                {1, Errs} -> {error, Errs};
-                {_, _} -> {error, "Testsuite requires different filename for each test"}
+    case recreate_lexer_parser() of
+        ok ->
+            case fold_tests("^[^(SKIP_)].+\.js$", false) of
+                {N, []}->
+                    Msg = lists:concat(["All ", N, " regression tests passed"]),
+                    {ok, Msg};
+                {_, Errs} -> 
+                    {error, Errs}
             end;
-        _ ->
-            {error, "ErlyJS library compilation failed"}
+        Err ->
+            Err
     end.
+    
+    
+run(Name) ->
+    case recreate_lexer_parser() of
+        ok ->
+            case make:all([load]) of
+                up_to_date ->
+                    case fold_tests("^" ++ Name ++ "\.js$", true) of
+                        {0, _} -> {error, "Test not found: " ++ Name ++ ".js"};
+                        {1, []} -> {ok, "Regression test passed"};
+                        {1, Errs} -> {error, Errs};
+                        {_, _} -> {error, "Testsuite requires different filename for each test"}
+                    end;
+                _ ->
+                    {error, "ErlyJS library compilation failed"}
+            end;
+        Err ->
+            Err
+    end.
+ 
  
 	
 %%====================================================================
 %% Internal functions
 %%====================================================================
 
+recreate_lexer_parser() ->
+    crypto:start(),
+    case recreate(erlyjs:lexer_src(),  lexer) of
+        ok ->
+            recreate(erlyjs:parser_src(), parser);
+        Err ->
+            Err
+    end.
+    
+    
+recreate(File, What) ->
+    Func = list_to_atom(lists:concat(['create_', What])),
+    case file:read_file(File) of
+        {ok, Data} ->
+            CheckSum = binary_to_list(crypto:sha(Data)),
+            Key = list_to_atom(lists:concat([erlyjs, Func, '_checksum'])),
+            case get(Key) of
+                CheckSum ->
+                    ok;
+                _ ->
+                    erlyjs:Func(),
+                    put(Key, CheckSum),
+                    io:format("Recompiling: ~p ...~n",[What]),
+                    ok
+            end;            
+        _ ->
+            erlyjs:Func(),
+            recreate(File, What)
+    end.
+            
+
 fold_tests(RegExp, Verbose) ->
-    filelib:fold_files(test_doc_root(), RegExp, true, 
+    filelib:fold_files(src_test_dir(), RegExp, true, 
         fun
             (File, {AccCount, AccErrs}) ->
                 case test(File, Verbose) of
@@ -120,6 +162,6 @@ test(File, Verbose) ->
 	end.
 	
 	
-test_doc_root() ->
+src_test_dir() ->
     {file, Ebin} = code:is_loaded(?MODULE),
     filename:join([filename:dirname(filename:dirname(Ebin)), "src", "tests"]).

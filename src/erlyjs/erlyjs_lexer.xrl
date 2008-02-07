@@ -51,67 +51,85 @@ COMMENT = (/\*(.|[\r\n])*?\*/|//.*)
 Rules.   
 
 %% float
-{DECIMAL}+\.{DECIMAL}+ :     {token,{float,TokenLine,list_to_float(TokenChars)}}.
+{DIGIT}+\.{DIGIT}+ :  {token,{float,TokenLine,list_to_float(TokenChars)}}.
 
 
 %% integer
-{DIGIT}+ :                   {token, {integer, TokenLine, list_to_integer(TokenChars)}}.
+{DIGIT}+ :            {token, {integer, TokenLine, list_to_integer(TokenChars)}}.
 
 
 %% string
-{STRING} :                   %% Strip quotes.
-                             S = lists:sublist(TokenChars, 2, TokenLen - 2),
-                             {token, {string, TokenLine, S}}.
+{STRING} :            %% Strip quotes.
+                      S = lists:sublist(TokenChars, 2, TokenLen - 2),
+                      {token, {string, TokenLine, S}}.
 
-{QUOTE} :                    %% Strip quotes.
-                             S = lists:sublist(TokenChars, 2, TokenLen - 2),
-                             {token, {string, TokenLine, S}}.
+{QUOTE} :             %% Strip quotes.
+                      S = lists:sublist(TokenChars, 2, TokenLen - 2),
+                      {token, {string, TokenLine, S}}.
 
-{COMMENT} :                  skip_token.       
+{COMMENT} :           skip_token.       
 
 
 %% identifiers
-({L}|{U}|{S})* :             Atom = list_to_atom(TokenChars),
-                             {token, case reserved_word(Atom) of
-                                 true -> {Atom,TokenLine};
-                                 false -> {identifier, TokenLine,Atom}
-                             end}.
+({L}|{U}|{S})* :      Atom = list_to_atom(TokenChars),
+                      {token, case reserved_word(Atom) of
+                          true -> {Atom,TokenLine};
+                          false -> {identifier, TokenLine,Atom}
+                      end}.
 
 %% ignore whitespaces
-{WS}+ :                      skip_token.
+{WS}+ :               skip_token.
 
-%% special characters
-[]()[}{!?/;:,.*+#<>=-] :  {token,{list_to_atom(TokenChars),TokenLine}}.
 
 %% special characters and single character operators
-\^ :                         {token,{'^',TokenLine}}.
-& :                          {token,{'&',TokenLine}}.
-\| :                         {token,{'|',TokenLine}}.
+\* :                  {token,{'*',TokenLine}}.
+/ :                   {token,{'/',TokenLine}}.
+\+ :                  {token,{'+',TokenLine}}.
+- :                   {token,{'-',TokenLine}}.
+\^ :                  {token,{'^',TokenLine}}.
+& :                   {token,{'&',TokenLine}}.
+\| :                  {token,{'|',TokenLine}}.
+\< :                  {token,{'<',TokenLine}}.
+\> :                  {token,{'>',TokenLine}}.
+= :                   {token,{'=',TokenLine}}.
+\. :                  {token,{'.',TokenLine}}.
+, :                   {token,{',',TokenLine}}.
+: :                   {token,{':',TokenLine}}.
+! :                   {token,{'!',TokenLine}}.
+\? :                  {token,{'?',TokenLine}}.
+; :                   {token,{';',TokenLine}}.
+\( :                  {token,{'(',TokenLine}}.
+\) :                  {token,{')',TokenLine}}.
+\{ :                  {token,{'{',TokenLine}}.
+} :                   {token,{'}',TokenLine}}.
+\[ :                  {token,{'[',TokenLine}}.
+\] :                  {token,{']',TokenLine}}.
+
 
 %% multi character operators
-\+\+ :                       {token,{'++',TokenLine}}.
--- :                         {token,{'--',TokenLine}}.
-<< :                         {token,{'<<',TokenLine}}.
->> :                         {token,{'>>',TokenLine}}.
->>> :                        {token,{'>>>',TokenLine}}.
-== :                         {token,{'==',TokenLine}}.
-!= :                         {token,{'!=',TokenLine}}.
-=== :                        {token,{'===',TokenLine}}.
-!== :                        {token,{'!==',TokenLine}}.
-&& :                         {token,{'&&',TokenLine}}.
-\|\| :                       {token,{'||',TokenLine}}.
-\*= :                        {token,{'*=',TokenLine}}.
-/= :                         {token,{'/=',TokenLine}}.
-%= :                         {token,{'%=',TokenLine}}.
-\+= :                        {token,{'+=',TokenLine}}.
--= :                         {token,{'-=',TokenLine}}.
-<<= :                        {token,{'<<=',TokenLine}}.  %% ???
->>= :                        {token,{'>>=',TokenLine}}.  %% ???
->>>= :                       {token,{'>>>=',TokenLine}}. %% ???
-&= :                         {token,{'&=',TokenLine}}.
-\^= :                        {token,{'^=',TokenLine}}.
-<= :                         {token,{'<=',TokenLine}}.
->= :                         {token,{'>=',TokenLine}}.
+\+\+ :                {token,{'++',TokenLine}}.
+-- :                  {token,{'--',TokenLine}}.
+<< :                  {token,{'<<',TokenLine}}.
+>> :                  {token,{'>>',TokenLine}}.
+>>> :                 {token,{'>>>',TokenLine}}.
+== :                  {token,{'==',TokenLine}}.
+!= :                  {token,{'!=',TokenLine}}.
+=== :                 {token,{'===',TokenLine}}.
+!== :                 {token,{'!==',TokenLine}}.
+&& :                  {token,{'&&',TokenLine}}.
+\|\| :                {token,{'||',TokenLine}}.
+\*= :                 {token,{'*=',TokenLine}}.
+/= :                  {token,{'/=',TokenLine}}.
+%= :                  {token,{'%=',TokenLine}}.
+\+= :                 {token,{'+=',TokenLine}}.
+-= :                  {token,{'-=',TokenLine}}.
+<<= :                 {token,{'<<=',TokenLine}}.  %% ???
+>>= :                 {token,{'>>=',TokenLine}}.  %% ???
+>>>= :                {token,{'>>>=',TokenLine}}. %% ???
+&= :                  {token,{'&=',TokenLine}}.
+\^= :                 {token,{'^=',TokenLine}}.
+<= :                  {token,{'<=',TokenLine}}.
+>= :                  {token,{'>=',TokenLine}}.
 
 Erlang code.
 
