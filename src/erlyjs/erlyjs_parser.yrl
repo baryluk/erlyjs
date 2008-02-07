@@ -245,10 +245,10 @@ RelationalExpression -> RelationalExpression in ShiftExpression  : '$1'.  % TODO
 
 %% Equality Operators TODO
 EqualityExpression -> RelationalExpression : '$1'.
-EqualityExpression -> EqualityExpression '==' RelationalExpression : '$1'.
-EqualityExpression -> EqualityExpression '!=' RelationalExpression : '$1'.
-EqualityExpression -> EqualityExpression '===' RelationalExpression  : '$1'.
-EqualityExpression -> EqualityExpression '!==' RelationalExpression : '$1'.
+EqualityExpression -> EqualityExpression '==' RelationalExpression : {'$2', '$1', '$3'}.
+EqualityExpression -> EqualityExpression '!=' RelationalExpression : {'$2', '$1', '$3'}.
+EqualityExpression -> EqualityExpression '===' RelationalExpression  : {'$2', '$1', '$3'}.
+EqualityExpression -> EqualityExpression '!==' RelationalExpression : {'$2', '$1', '$3'}.
 
 %% Binary Bitwise Operators  TODO (is currently wrong)
 BitwiseAndExpression -> EqualityExpression : '$1'.
