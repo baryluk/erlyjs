@@ -252,17 +252,17 @@ EqualityExpression -> EqualityExpression '!==' RelationalExpression : {'$2', '$1
 
 %% Binary Bitwise Operators  TODO (is currently wrong)
 BitwiseAndExpression -> EqualityExpression : '$1'.
-BitwiseAndExpression -> BitwiseAndExpression '&' EqualityExpression : {op, 'band', '$1', '$3'}.
+BitwiseAndExpression -> BitwiseAndExpression '&' EqualityExpression : {'$2', '$1', '$3'}.
 BitwiseXorExpression -> BitwiseAndExpression : '$1'.
-BitwiseXorExpression -> BitwiseXorExpression '^' BitwiseAndExpression : {op, 'bxor', '$1', '$3'}.
+BitwiseXorExpression -> BitwiseXorExpression '^' BitwiseAndExpression : {'$2', '$1', '$3'}.
 BitwiseOrExpression -> BitwiseXorExpression : '$1'.
-BitwiseOrExpression -> BitwiseOrExpression '|' BitwiseXorExpression : {op, 'bor', '$1', '$3'}.
+BitwiseOrExpression -> BitwiseOrExpression '|' BitwiseXorExpression : {'$2', '$1', '$3'}.
 
 %% Binary Logical Operators  TODO (is currently wrong)
 LogicalAndExpression -> BitwiseOrExpression : '$1'.
-LogicalAndExpression -> LogicalAndExpression '&&' BitwiseOrExpression : {op, 'and', '$1', '$3'}.
+LogicalAndExpression -> LogicalAndExpression '&&' BitwiseOrExpression : {'$2', '$1', '$3'}.
 LogicalOrExpression -> LogicalAndExpression : '$1'.
-LogicalOrExpression -> LogicalOrExpression '||' LogicalAndExpression : {op, 'or', '$1', '$3'}.
+LogicalOrExpression -> LogicalOrExpression '||' LogicalAndExpression : {'$2', '$1', '$3'}.
 
 %% Conditional Operator  TODO
 ConditionalExpression -> LogicalOrExpression : '$1'.

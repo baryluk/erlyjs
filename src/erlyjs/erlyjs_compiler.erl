@@ -278,10 +278,24 @@ ast({{'===' = Op, _}, L, R}, {Ctx, Scopes}) ->
     {{Ast, #ast_info{}}, {Ctx, Scopes}};    
 ast({{'!==' = Op, _}, L, R}, {Ctx, Scopes}) ->      
     Ast = op(Op, body_ast(L, Ctx, Scopes), body_ast(R, Ctx, Scopes)),
+    {{Ast, #ast_info{}}, {Ctx, Scopes}};     
+ast({{'&' = Op, _}, L, R}, {Ctx, Scopes}) ->      
+    Ast = op(Op, body_ast(L, Ctx, Scopes), body_ast(R, Ctx, Scopes)),
     {{Ast, #ast_info{}}, {Ctx, Scopes}};    
-ast(Unknown, {Context, Scopes}) ->
-    io:format("TRACE ~p:~p Unknown: ~p~n",[?MODULE, ?LINE, Unknown]),
-    empty_ast(Context, Scopes).
+ast({{'^' = Op, _}, L, R}, {Ctx, Scopes}) ->      
+    Ast = op(Op, body_ast(L, Ctx, Scopes), body_ast(R, Ctx, Scopes)),
+    {{Ast, #ast_info{}}, {Ctx, Scopes}};
+ast({{'|' = Op, _}, L, R}, {Ctx, Scopes}) ->      
+    Ast = op(Op, body_ast(L, Ctx, Scopes), body_ast(R, Ctx, Scopes)),
+    {{Ast, #ast_info{}}, {Ctx, Scopes}};      
+ast({{'&&' = Op, _}, L, R}, {Ctx, Scopes}) ->      
+    Ast = op(Op, body_ast(L, Ctx, Scopes), body_ast(R, Ctx, Scopes)),
+    {{Ast, #ast_info{}}, {Ctx, Scopes}};    
+ast({{'||' = Op, _}, L, R}, {Ctx, Scopes}) ->      
+    Ast = op(Op, body_ast(L, Ctx, Scopes), body_ast(R, Ctx, Scopes)),
+    {{Ast, #ast_info{}}, {Ctx, Scopes}};      
+ast(Unknown, _) ->
+    throw({error, lists:concat(["Unknown token: ", Unknown])}).
     
  
 empty_ast(Context, Scopes) ->
@@ -427,8 +441,23 @@ op('===', {L, _, _}, {R, _, _}) ->
     erl_syntax:infix_expr(L, erl_syntax:operator('=:='), R);
 op('!==', {L, _, _}, {R, _, _}) ->
     %% TODO: dynamic typechecking
-    erl_syntax:infix_expr(L, erl_syntax:operator('=/='), R).
-    
+    erl_syntax:infix_expr(L, erl_syntax:operator('=/='), R);
+op('&', {L, _, _}, {R, _, _}) ->
+    %% TODO: dynamic typechecking
+    erl_syntax:infix_expr(L, erl_syntax:operator('band'), R);
+op('^', {L, _, _}, {R, _, _}) ->
+    %% TODO: dynamic typechecking
+    erl_syntax:infix_expr(L, erl_syntax:operator('bxor'), R);
+op('|' , {L, _, _}, {R, _, _}) ->
+    %% TODO: dynamic typechecking
+    erl_syntax:infix_expr(L, erl_syntax:operator('bor'), R);
+op('&&', {L, _, _}, {R, _, _}) ->
+    %% TODO: dynamic typechecking
+    erl_syntax:infix_expr(L, erl_syntax:operator('and'), R);
+op('||', {L, _, _}, {R, _, _}) ->
+    %% TODO: dynamic typechecking
+    erl_syntax:infix_expr(L, erl_syntax:operator('or'), R).
+ 
         
 merge_info(Info1, Info2) ->
     #ast_info{

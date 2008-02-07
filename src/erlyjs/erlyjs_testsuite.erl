@@ -57,7 +57,7 @@ run() ->
 test(Name) ->
     case make:all([load]) of
         up_to_date ->
-            case fold_tests(Name ++ ".js$", true) of
+            case fold_tests("^" ++ Name ++ "\.js$", true) of
                 {0, _} -> {error, "Test not found: " ++ Name ++ ".js"};
                 {1, []} -> {ok, "Regression test passed"};
                 {1, Errs} -> {error, Errs};
