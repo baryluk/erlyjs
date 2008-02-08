@@ -1,6 +1,6 @@
 // Mandatory. Return here a description of the test case.
 function test_description() {
-    return "Assign bitwise shift left '<<=' operator test";
+    return "Bitwise shift right (sign propagating) '>>' operator test";
 }
 
 // Mandatory. Return here an array of arguments the testsuite will use 
@@ -11,7 +11,7 @@ function test_args() {
 
 // Mandatory. Return here the expected test result.
 function test_result() {
-    return 36;
+    return -3;
 }
 
 // Optional. Provide here any global code.
@@ -21,7 +21,7 @@ function test_result() {
 // Testsuite invokes this function with the arguments from test_args()
 // and compares the return value with the expected result from test_result().
 function test() {
-    var a=9, b=2;
-    a <<= b;
-    return a;
+    var a=-9, b=2, c;
+    c = a >> b;
+    return c;
 }

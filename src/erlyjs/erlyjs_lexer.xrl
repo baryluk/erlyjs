@@ -37,11 +37,11 @@
 
 Definitions.
 
-DIGIT = [0-9]
-U = [A-Z]
-L = [a-z]
-S = [_]
-WS = [\000-\s]
+Digit = [0-9]
+UPPERCASE = [A-Z]
+LOWERCASE = [a-z]
+UNDERSCORE = [_]
+WHITESPACE = [\000-\s]
 
 STRING = "(\\\^.|\\.|[^"])*"
 QUOTE = '(\\\^.|\\.|[^'])*'
@@ -50,35 +50,28 @@ COMMENT = (/\*(.|[\r\n])*?\*/|//.*)
 
 Rules.   
 
-%% float
-{DIGIT}+\.{DIGIT}+ :  {token,{float,TokenLine,list_to_float(TokenChars)}}.
+(-{Digit}+|{Digit}+) : build_integer(TokenChars, TokenLine).
 
+(-{Digi}+\.{Dgit}+|{Digi}+\.{Dgit}+) : build_float(TokenChars, TokenLine).
 
-%% integer
-{DIGIT}+ :            {token, {integer, TokenLine, list_to_integer(TokenChars)}}.
+{STRING} : build_string(TokenChars, TokenLine, TokenLen).
 
+{QUOTE} : build_string(TokenChars, TokenLine, TokenLen).
 
-%% string
-{STRING} :            %% Strip quotes.
-                      S = lists:sublist(TokenChars, 2, TokenLen - 2),
-                      {token, {string, TokenLine, S}}.
+{COMMENT} : skip_token.       
 
-{QUOTE} :             %% Strip quotes.
-                      S = lists:sublist(TokenChars, 2, TokenLen - 2),
-                      {token, {string, TokenLine, S}}.
+%% TODO:
+%% Variables: first: letter, underscore (_), or dollar sign ($)
+%%            following: as first, but number are allowed as well
+%% Function-names: ????
+%% Objectnames: ????
+%% examples:
+%% ({Small}({Small}|{Big}|{Dig}|_)*) : {token, {atom,YYline, YYtext}}.
+%% ({Big}({Small} | {Big}|{Dig} | _)*) : {token, special(YYtext, YYline)}
 
-{COMMENT} :           skip_token.       
+({LOWERCASE}|{UPPERCASE}|{UNDERSCORE})* : build_identifier(TokenChars, TokenLine).  %% TOOO: needs to be fixed
 
-
-%% identifiers
-({L}|{U}|{S})* :      Atom = list_to_atom(TokenChars),
-                      {token, case reserved_word(Atom) of
-                          true -> {Atom,TokenLine};
-                          false -> {identifier, TokenLine, Atom}
-                      end}.
-
-%% ignore whitespaces
-{WS}+ :               skip_token.
+{WHITESPACE}+ : skip_token.
 
 
 %% special characters and single character operators
@@ -135,7 +128,29 @@ Rules.
 
 Erlang code.
 
--export([reserved_word/1]).
+-export([
+    build_integer/2, 
+    build_float/2,
+    build_string/3, 
+    build_identifier/2,
+    reserved_word/1]).
+    
+build_integer(Chars, Line) ->
+    {token, {integer, Line, list_to_integer(Chars)}}.
+
+build_float(Chars, Line) ->
+    {token, {float, Line,list_to_float(Chars)}}.
+
+build_string(Chars, Len, Line) ->
+    S = lists:sublist(Chars, 2, Len - 2), 
+    {token, {string, Line, S}}.
+  
+build_identifier(Chars, Line) ->  
+    Atom = list_to_atom(Chars),
+    case reserved_word(Atom) of
+        true -> {token, {Atom, Line}};
+        false -> {token, {identifier, Line, Atom}}
+    end.
 
 %% reserved words
 reserved_word('break') -> true;
