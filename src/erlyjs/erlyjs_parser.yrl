@@ -123,7 +123,7 @@ Terminals
     float integer string new this null true false delete void typeof try throw with break return 
     identifier regexp function var instanceof in if else switch do while for case default
     continue finally catch
-    '+' '-' '*' '/' ':' '~' '!' '*=' '/=' '%=' '+=' '-=' '<<=' '>>=' '>>>='
+    '+' '-' '*' '/' '%' ':' '~' '!' '*=' '/=' '%=' '+=' '-=' '<<=' '>>=' '>>>='
     '&=' '^=' '|=' '=' ';' '?' '<<' '>>' '>>>' '<<<' '<' '>' 
     '(' ')' '[' ']' '.' ',' '++' '--' '&&' '===' '==' '<=' '>=' '!=' '!==' 
     '{' '}' '&' '^' '||' '|'
@@ -220,7 +220,7 @@ UnaryExpression -> '!' UnaryExpression : '$1'.
 MultiplicativeExpression -> UnaryExpression : '$1'.
 MultiplicativeExpression -> MultiplicativeExpression '*' UnaryExpression : {op, '$2', '$1', '$3'}.
 MultiplicativeExpression -> MultiplicativeExpression '/' UnaryExpression : {op, '$2', '$1', '$3'}.
-
+MultiplicativeExpression -> MultiplicativeExpression '%' UnaryExpression : {op, '$2', '$1', '$3'}.
 
 %% Additive Operators
 AdditiveExpression -> MultiplicativeExpression : '$1'.
@@ -269,8 +269,8 @@ ConditionalExpression -> LogicalOrExpression '?' AssignmentExpression ':' Assign
 
 %% Assignment Operators 
 AssignmentExpression -> ConditionalExpression : '$1'. 
-AssignmentExpression -> LeftSideExpression '=' AssignmentExpression : {'$2', '$1', '$3'}.
-AssignmentExpression -> LeftSideExpression CompoundAssignment AssignmentExpression  : {'$2', '$1', '$3'}.
+AssignmentExpression -> LeftSideExpression '=' AssignmentExpression : {assign, '$2', '$1', '$3'}.
+AssignmentExpression -> LeftSideExpression CompoundAssignment AssignmentExpression  : {assign, '$2', '$1', '$3'}.
 CompoundAssignment -> '*=' : '$1'.
 CompoundAssignment -> '/=' : '$1'. 
 CompoundAssignment -> '%=' : '$1'. 

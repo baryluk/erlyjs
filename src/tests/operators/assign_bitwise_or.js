@@ -1,6 +1,6 @@
 // Mandatory. Return here a description of the test case.
 function test_description() {
-    return "Greater or equal '>=' operator test";
+    return "Assign bitwise or '|=' operator test";
 }
 
 // Mandatory. Return here an array of arguments the testsuite will use 
@@ -11,7 +11,7 @@ function test_args() {
 
 // Mandatory. Return here the expected test result.
 function test_result() {
-    return true;
+    return 15;
 }
 
 // Optional. Provide here any global code.
@@ -21,7 +21,7 @@ function test_result() {
 // Testsuite invokes this function with the arguments from test_args()
 // and compares the return value with the expected result from test_result().
 function test() {
-    var a=7, b=2, c;
-    c = a >= b;
-    return c;
+    var a=14, b=9;
+    a |= b;
+    return a;
 }

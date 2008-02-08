@@ -236,27 +236,27 @@ ast({{return, _L}, Expression}, {Ctx, Acc}) ->
 ast({{function, _L1}, {identifier, _L2, Name}, {params, Params, body, Body}}, {Ctx, Acc}) ->
     func(Name, Params, Body, Ctx, Acc);      
 ast({{{identifier, _L, Name}, MemberList}, {'(', Args}}, {Ctx, Acc}) ->
-    call(Name, MemberList, Args, Ctx, Acc);
-ast({{'=', _}, {identifier, _, Name}, Expression}, {Ctx, Acc}) ->  
-    {{LeftAst, _}, {_, Acc1}} = var_name(Name, Ctx#js_ctx{action = set}, Acc),  
-    {RightAst, Info, _} = body_ast(Expression, Ctx, Acc),   
-    Ast = erl_syntax:match_expr(LeftAst, RightAst),  
-    {{Ast, Info}, {Ctx, Acc1}};      
-ast({op, {Op, _}, Js1, Js2}, {Ctx, Acc}) ->
-    {E1, _, #tree_acc{names_set = Set1}} = body_ast(Js1, Ctx, Acc),
-    {E2, _, #tree_acc{names_set = Set2}} = body_ast(Js2, Ctx, Acc#tree_acc{names_set = Set1}),
-    E3 = op_ast(Op, E1, E2),
-    {{E3, #ast_inf{}}, {Ctx, Acc#tree_acc{names_set = Set2}}};
-ast({op, 'cond' = Op, Js1, Js2, Js3}, {Ctx, Acc}) ->
-    {E1, _, #tree_acc{names_set = Set1}} = body_ast(Js1, Ctx, Acc),
-    {E2, _, #tree_acc{names_set = Set2}} = body_ast(Js2, Ctx, Acc#tree_acc{names_set = Set1}),
-    {E3, _, #tree_acc{names_set = Set3}} = body_ast(Js3, Ctx, Acc#tree_acc{names_set = Set2}),
-    E4 = op_ast(Op, E1, E2, E3),
-    {{E4, #ast_inf{}}, {Ctx, Acc#tree_acc{names_set = Set3}}};   
+    call(Name, MemberList, Args, Ctx, Acc);     
+ast({op, {Op, _}, In1, In2}, {Ctx, Acc}) ->
+    {Out1, _, #tree_acc{names_set = Set1}} = body_ast(In1, Ctx, Acc),
+    {Out2, _, #tree_acc{names_set = Set2}} = body_ast(In2, Ctx, Acc#tree_acc{names_set = Set1}),
+    {{op_ast(Op, Out1, Out2), #ast_inf{}}, {Ctx, Acc#tree_acc{names_set = Set2}}};
+ast({op, Op, In1, In2, In3}, {Ctx, Acc}) ->
+    {Out1, _, #tree_acc{names_set = Set1}} = body_ast(In1, Ctx, Acc),
+    {Out2, _, #tree_acc{names_set = Set2}} = body_ast(In2, Ctx, Acc#tree_acc{names_set = Set1}),
+    {Out3, _, #tree_acc{names_set = Set3}} = body_ast(In3, Ctx, Acc#tree_acc{names_set = Set2}),
+    {{op_ast(Op, Out1, Out2, Out3), #ast_inf{}}, {Ctx, Acc#tree_acc{names_set = Set3}}}; 
+ast({assign, {'=' = Op, _}, {identifier, _, Name}, In1}, {Ctx, Acc}) ->  
+    {{Out1, _}, {_, Acc1}} = var_name(Name, Ctx#js_ctx{action = set}, Acc),  
+    {Out2, Inf, _} = body_ast(In1, Ctx, Acc), 
+    {{assign_ast(Op, Out1, Out2), Inf}, {Ctx, Acc1}};   
+ast({assign, {Op, _}, {identifier, _, Name}, In1}, {Ctx, Acc}) ->  
+    {{Out1, _}, _} = var_name(Name, Ctx, Acc),  
+    {Out2, Inf, Acc1} = body_ast(In1, Ctx, Acc),    
+    {{Out3, _}, {_, Acc2}} = var_name(Name, Ctx#js_ctx{action = set}, Acc1), 
+    {{assign_ast('=', Out3, op_ast(assign_to_op(Op), Out1, Out2)), Inf}, {Ctx, Acc2}};    
 ast(Unknown, _) ->
-    throw({error, lists:concat(["Unknown token: ", Unknown])}).
-    
- 
+    throw({error, lists:concat(["Unknown token: ", Unknown])}). 
 empty_ast(Ctx, Acc) ->
     {{[], #ast_inf{}}, {Ctx, Acc}}.  
     
@@ -360,6 +360,9 @@ op_ast('*' = Op, Ast1, Ast2) ->
 op_ast('/' = Op, Ast1, Ast2) ->
     %% TODO: dynamic typechecking
     erl_syntax:infix_expr(Ast1, erl_syntax:operator(Op), Ast2);
+op_ast('%', Ast1, Ast2) ->
+    %% TODO: dynamic typechecking
+    erl_syntax:infix_expr(Ast1, erl_syntax:operator('rem'), Ast2);    
 op_ast('+' = Op, Ast1, Ast2) ->
     %% TODO: dynamic typechecking
     erl_syntax:infix_expr(Ast1, erl_syntax:operator(Op), Ast2);
@@ -410,21 +413,35 @@ op_ast('&&', Ast1, Ast2) ->
     erl_syntax:infix_expr(Ast1, erl_syntax:operator('and'), Ast2);
 op_ast('||', Ast1, Ast2) ->
     %% TODO: dynamic typechecking
-    erl_syntax:infix_expr(Ast1, erl_syntax:operator('or'), Ast2).
+    erl_syntax:infix_expr(Ast1, erl_syntax:operator('or'), Ast2);
+op_ast(Unknown, _, _) ->    
+    throw({error, lists:concat(["Unknown operator: ", Unknown])}).
     
 op_ast('cond', Ast1, Ast2, Ast3) ->
     %% TODO: dynamic typechecking    
     erl_syntax:case_expr(Ast1, [
         erl_syntax:clause([erl_syntax:atom(true)], none, [Ast2]),
-        erl_syntax:clause([erl_syntax:underscore()], none, [Ast3])]).
+        erl_syntax:clause([erl_syntax:underscore()], none, [Ast3])]);
+op_ast(Unknown, _, _, _) ->    
+    throw({error, lists:concat(["Unknown operator: ", Unknown])}).        
+ 
+ 
+assign_ast('=', Ast1, Ast2) ->
+    %% TODO: dynamic typechecking
+    erl_syntax:match_expr(Ast1, Ast2);      
+assign_ast(Unknown, _, _) ->    
+    throw({error, lists:concat(["Unknown assignment operator: ", Unknown])}).        
  
         
 merge_info(Info1, Info2) ->
     #ast_inf{
         export_asts = lists:merge(Info1#ast_inf.export_asts, Info2#ast_inf.export_asts),
         global_asts = lists:merge(Info1#ast_inf.global_asts, Info2#ast_inf.global_asts)}. 
-    
 
+
+assign_to_op(Assign) ->
+    list_to_atom(tl(lists:reverse(string:strip(atom_to_list(Assign), both, $')))).
+    
 
 erl_name(Name) ->
     lists:concat(["js_", Name]).
