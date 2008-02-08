@@ -60,7 +60,7 @@ Rules.
 
 {COMMENT} : skip_token.       
 
-%% TODO:
+%% TODO: fix build_identifier
 %% Variables: first: letter, underscore (_), or dollar sign ($)
 %%            following: as first, but number are allowed as well
 %% Function-names: ????

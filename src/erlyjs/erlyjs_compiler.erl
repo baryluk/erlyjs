@@ -375,6 +375,9 @@ op_ast('<<', Ast1, Ast2) ->
 op_ast('>>', Ast1, Ast2) ->
     %% TODO: dynamic typechecking
     erl_syntax:infix_expr(Ast1, erl_syntax:operator("bsr"), Ast2);  
+op_ast('>>>', Ast1, Ast2) ->
+    %% TODO: implementation and dynamic typechecking
+    erl_syntax:atom(not_implemented_yet);    
 op_ast('<' = Op, Ast1, Ast2) ->
     %% TODO: dynamic typechecking
     erl_syntax:infix_expr(Ast1, erl_syntax:operator(Op), Ast2);
