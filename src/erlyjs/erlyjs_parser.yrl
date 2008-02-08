@@ -218,54 +218,54 @@ UnaryExpression -> '!' UnaryExpression : '$1'.
 
 %% Multiplicative Operators
 MultiplicativeExpression -> UnaryExpression : '$1'.
-MultiplicativeExpression -> MultiplicativeExpression '*' UnaryExpression : {'$2', '$1', '$3'}.
-MultiplicativeExpression -> MultiplicativeExpression '/' UnaryExpression : {'$2', '$1', '$3'}.
+MultiplicativeExpression -> MultiplicativeExpression '*' UnaryExpression : {op, '$2', '$1', '$3'}.
+MultiplicativeExpression -> MultiplicativeExpression '/' UnaryExpression : {op, '$2', '$1', '$3'}.
 
 
 %% Additive Operators
 AdditiveExpression -> MultiplicativeExpression : '$1'.
-AdditiveExpression -> AdditiveExpression '+' MultiplicativeExpression : {'$2', '$1', '$3'}.
-AdditiveExpression -> AdditiveExpression '-' MultiplicativeExpression : {'$2', '$1', '$3'}.
+AdditiveExpression -> AdditiveExpression '+' MultiplicativeExpression : {op, '$2', '$1', '$3'}.
+AdditiveExpression -> AdditiveExpression '-' MultiplicativeExpression : {op, '$2', '$1', '$3'}.
 
 %% Bitwise Shift Operators
 ShiftExpression -> AdditiveExpression : '$1'.
-ShiftExpression -> ShiftExpression '<<' AdditiveExpression : {'$2', '$1', '$3'}.
-ShiftExpression -> ShiftExpression '>>' AdditiveExpression : {'$2', '$1', '$3'}.
+ShiftExpression -> ShiftExpression '<<' AdditiveExpression : {op, '$2', '$1', '$3'}.
+ShiftExpression -> ShiftExpression '>>' AdditiveExpression : {op, '$2', '$1', '$3'}.
 ShiftExpression -> ShiftExpression '>>>' AdditiveExpression : '$1'. % TODO
 
 %% Relational Operators
 RelationalExpression -> ShiftExpression : '$1'.
-RelationalExpression -> RelationalExpression '<' ShiftExpression : {'$2', '$1', '$3'}.
-RelationalExpression -> RelationalExpression '>' ShiftExpression : {'$2', '$1', '$3'}.
-RelationalExpression -> RelationalExpression '<=' ShiftExpression : {'$2', '$1', '$3'}.
-RelationalExpression -> RelationalExpression '>=' ShiftExpression  : {'$2', '$1', '$3'}.
+RelationalExpression -> RelationalExpression '<' ShiftExpression : {op, '$2', '$1', '$3'}.
+RelationalExpression -> RelationalExpression '>' ShiftExpression : {op, '$2', '$1', '$3'}.
+RelationalExpression -> RelationalExpression '<=' ShiftExpression : {op, '$2', '$1', '$3'}.
+RelationalExpression -> RelationalExpression '>=' ShiftExpression  : {op, '$2', '$1', '$3'}.
 RelationalExpression -> RelationalExpression instanceof ShiftExpression : '$1'. % TODO
 RelationalExpression -> RelationalExpression in ShiftExpression  : '$1'.  % TODO
 
 %% Equality Operators
 EqualityExpression -> RelationalExpression : '$1'.
-EqualityExpression -> EqualityExpression '==' RelationalExpression : {'$2', '$1', '$3'}.
-EqualityExpression -> EqualityExpression '!=' RelationalExpression : {'$2', '$1', '$3'}.
-EqualityExpression -> EqualityExpression '===' RelationalExpression  : {'$2', '$1', '$3'}.
-EqualityExpression -> EqualityExpression '!==' RelationalExpression : {'$2', '$1', '$3'}.
+EqualityExpression -> EqualityExpression '==' RelationalExpression : {op, '$2', '$1', '$3'}.
+EqualityExpression -> EqualityExpression '!=' RelationalExpression : {op, '$2', '$1', '$3'}.
+EqualityExpression -> EqualityExpression '===' RelationalExpression  : {op, '$2', '$1', '$3'}.
+EqualityExpression -> EqualityExpression '!==' RelationalExpression : {op, '$2', '$1', '$3'}.
 
 %% Binary Bitwise Operators
 BitwiseAndExpression -> EqualityExpression : '$1'.
-BitwiseAndExpression -> BitwiseAndExpression '&' EqualityExpression : {'$2', '$1', '$3'}.
+BitwiseAndExpression -> BitwiseAndExpression '&' EqualityExpression : {op, '$2', '$1', '$3'}.
 BitwiseXorExpression -> BitwiseAndExpression : '$1'.
-BitwiseXorExpression -> BitwiseXorExpression '^' BitwiseAndExpression : {'$2', '$1', '$3'}.
+BitwiseXorExpression -> BitwiseXorExpression '^' BitwiseAndExpression : {op, '$2', '$1', '$3'}.
 BitwiseOrExpression -> BitwiseXorExpression : '$1'.
-BitwiseOrExpression -> BitwiseOrExpression '|' BitwiseXorExpression : {'$2', '$1', '$3'}.
+BitwiseOrExpression -> BitwiseOrExpression '|' BitwiseXorExpression : {op, '$2', '$1', '$3'}.
 
 %% Binary Logical Operators
 LogicalAndExpression -> BitwiseOrExpression : '$1'.
-LogicalAndExpression -> LogicalAndExpression '&&' BitwiseOrExpression : {'$2', '$1', '$3'}.
+LogicalAndExpression -> LogicalAndExpression '&&' BitwiseOrExpression : {op, '$2', '$1', '$3'}.
 LogicalOrExpression -> LogicalAndExpression : '$1'.
-LogicalOrExpression -> LogicalOrExpression '||' LogicalAndExpression : {'$2', '$1', '$3'}.
+LogicalOrExpression -> LogicalOrExpression '||' LogicalAndExpression : {op, '$2', '$1', '$3'}.
 
 %% Conditional Operator
 ConditionalExpression -> LogicalOrExpression : '$1'.
-ConditionalExpression -> LogicalOrExpression '?' AssignmentExpression ':' AssignmentExpression : {cond, '$1', '$3', '$5'}. 
+ConditionalExpression -> LogicalOrExpression '?' AssignmentExpression ':' AssignmentExpression : {op, 'cond', '$1', '$3', '$5'}. 
 
 %% Assignment Operators 
 AssignmentExpression -> ConditionalExpression : '$1'. 

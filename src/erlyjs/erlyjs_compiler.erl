@@ -35,7 +35,7 @@
 -export([compile/2, compile/3]).
 
 
--record(js_context, {
+-record(js_ctx, {
     out_dir = "ebin",
     global = true,   
     args = [],
@@ -46,37 +46,39 @@
     module = [],
     verbose = false}).
     
--record(ast_info, {
+-record(ast_inf, {
     vars = [],
     export_asts = [],
     global_asts = []}).
 
 -record(scope, {
-    names = [],
-    names_used_set = sets:new(),
     names_dict = dict:new()}).
+    
+-record(tree_acc, {
+    names_set = sets:new(),
+    scopes = [#scope{}]}).
  
  
 compile(File, Module) ->
     compile(File, Module, []).
      
 compile(File, Module, Options) ->
-    Context = init_js_context(File, Module, Options),
-    {M, F} = Context#js_context.reader,
+    Ctx = init_js_ctx(File, Module, Options),
+    {M, F} = Ctx#js_ctx.reader,
     case catch M:F(File) of
         {ok, Data} ->
             crypto:start(),
             CheckSum = binary_to_list(crypto:sha(Data)),
-            case parse(CheckSum, Data, Context) of    
+            case parse(CheckSum, Data, Ctx) of    
                 ok ->
                     ok;
                 {ok, JsParseTree} ->
-                    trace(?MODULE, ?LINE, "JsParseTree", JsParseTree, Context),
-                    try body_ast(JsParseTree, Context, [#scope{}]) of
+                    trace(?MODULE, ?LINE, "JsParseTree", JsParseTree, Ctx),
+                    try body_ast(JsParseTree, Ctx, #tree_acc{}) of
                         {AstList, Info, _} ->                
                             Forms = forms(CheckSum, Module, AstList, Info),  
-                            trace(?MODULE, ?LINE, "Forms", Forms, Context),
-                            compile_forms(Forms, Context)                                      
+                            trace(?MODULE, ?LINE, "Forms", Forms, Ctx),
+                            compile_forms(Forms, Ctx)                                      
                     catch 
                         throw:Error -> Error
                     end;
@@ -92,14 +94,14 @@ compile(File, Module, Options) ->
 %% Internal functions
 %%====================================================================    
 
-init_js_context(_File, Module, Options) ->
-    Ctx = #js_context{},
-    #js_context{ 
+init_js_ctx(_File, Module, Options) ->
+    Ctx = #js_ctx{},
+    #js_ctx{ 
         module = list_to_atom(Module),
-        out_dir = proplists:get_value(out_dir, Options,  Ctx#js_context.out_dir),
-        verbose = proplists:get_value(verbose, Options, Ctx#js_context.verbose),
-        reader = proplists:get_value(reader, Options, Ctx#js_context.reader),
-        force_recompile = proplists:get_value(force_recompile, Options, Ctx#js_context.force_recompile)}.
+        out_dir = proplists:get_value(out_dir, Options,  Ctx#js_ctx.out_dir),
+        verbose = proplists:get_value(verbose, Options, Ctx#js_ctx.verbose),
+        reader = proplists:get_value(reader, Options, Ctx#js_ctx.reader),
+        force_recompile = proplists:get_value(force_recompile, Options, Ctx#js_ctx.force_recompile)}.
       
         
 parse(Data) ->
@@ -111,10 +113,10 @@ parse(Data) ->
     end.
         
 
-parse(_, Data, #js_context{force_recompile = true}) ->  
+parse(_, Data, #js_ctx{force_recompile = true}) ->  
     parse(Data);
-parse(CheckSum, Data, Context) ->
-    Module = Context#js_context.module,
+parse(CheckSum, Data, Ctx) ->
+    Module = Ctx#js_ctx.module,
     case catch Module:checksum() of
         CheckSum ->   
             ok;
@@ -124,7 +126,7 @@ parse(CheckSum, Data, Context) ->
 
 
 forms(Checksum, Module, FuncAsts, Info) ->
-    InitFuncAstBody = case Info#ast_info.global_asts of
+    InitFuncAstBody = case Info#ast_inf.global_asts of
         [] -> 
             [erl_syntax:tuple([erl_syntax:atom("error"),
                 erl_syntax:atom("no_global_code")])];
@@ -165,12 +167,12 @@ forms(Checksum, Module, FuncAsts, Info) ->
     ExportReset = erl_syntax:arity_qualifier(erl_syntax:atom("jsreset"), erl_syntax:integer(0)),
     ExportChecksum = erl_syntax:arity_qualifier(erl_syntax:atom("checksum"), erl_syntax:integer(0)),
     ExportAst = erl_syntax:attribute(erl_syntax:atom(export),
-        [erl_syntax:list([ExportInit, ExportReset, ExportChecksum | Info#ast_info.export_asts])]),
+        [erl_syntax:list([ExportInit, ExportReset, ExportChecksum | Info#ast_inf.export_asts])]),
     [erl_syntax:revert(X) || X <- [ModuleAst, ExportAst, InitFuncAst, ResetFuncAst, ChecksumFuncAst | FuncAsts]].
         
  
-compile_forms(Forms, Context) ->  
-    Options = case Context#js_context.verbose of
+compile_forms(Forms, Ctx) ->  
+    Options = case Ctx#js_ctx.verbose of
         true ->
             [verbose,report_errors,report_warnings];
         _ ->
@@ -178,7 +180,7 @@ compile_forms(Forms, Context) ->
     end,  
     case compile:forms(Forms, Options) of
         {ok, Module1, Bin} ->           
-            Path = filename:join([Context#js_context.out_dir, atom_to_list(Module1) ++ ".beam"]),
+            Path = filename:join([Ctx#js_ctx.out_dir, atom_to_list(Module1) ++ ".beam"]),
             case file:write_file(Path, Bin) of
                 ok ->
                     code:purge(Module1),
@@ -194,166 +196,113 @@ compile_forms(Forms, Context) ->
     end.
     
   
-body_ast(JsParseTree, Context, Scopes) when is_list(JsParseTree) ->
-    {AstInfoList, {_, Scopes1}} = lists:mapfoldl(fun ast/2, {Context, Scopes}, JsParseTree),  
-    {AstList, Info} = lists:mapfoldl(
+body_ast(JsParseTree, Ctx, Acc) when is_list(JsParseTree) ->
+    {AstInfList, {_, Acc1}} = lists:mapfoldl(fun ast/2, {Ctx, Acc}, JsParseTree),  
+    {AstList, Inf} = lists:mapfoldl(
         fun
-            ({XAst, XInfo}, InfoAcc) ->
-                {XAst, merge_info(XInfo, InfoAcc)}
-        end, #ast_info{}, AstInfoList),
-    {lists:flatten(AstList), Info, Scopes1};     
-body_ast(JsParseTree, Context, Scopes) ->
-    {{Ast, Info}, {_, Scopes1}} = ast(JsParseTree, {Context, Scopes}),
-    {Ast, Info, Scopes1}.
+            ({XAst, XInf}, InfAcc) ->
+                {XAst, merge_info(XInf, InfAcc)}
+        end, #ast_inf{}, AstInfList),
+    {lists:flatten(AstList), Inf, Acc1};     
+body_ast(JsParseTree, Ctx, Acc) ->
+    {{Ast, Inf}, {_, Acc1}} = ast(JsParseTree, {Ctx, Acc}),
+    {Ast, Inf, Acc1}.
 
 
-ast({identifier, _L, true}, {Context, Scopes}) -> 
-    {{erl_syntax:atom(true), #ast_info{}}, {Context, Scopes}};
-ast({identifier, _L, false}, {Context, Scopes}) -> 
-    {{erl_syntax:atom(false), #ast_info{}}, {Context, Scopes}};    
-ast({integer, _L, Value}, {Context, Scopes}) -> 
-    {{erl_syntax:integer(Value), #ast_info{}}, {Context, Scopes}};
-ast({string, _L, Value}, {Context, Scopes}) -> 
-    {{erl_syntax:string(Value), #ast_info{}}, {Context, Scopes}}; %% TODO: binary
-ast({{'[', _L},  Value}, {Context, Scopes}) -> 
+ast({identifier, _L, true}, {Ctx, Acc}) -> 
+    {{erl_syntax:atom(true), #ast_inf{}}, {Ctx, Acc}};
+ast({identifier, _L, false}, {Ctx, Acc}) -> 
+    {{erl_syntax:atom(false), #ast_inf{}}, {Ctx, Acc}};    
+ast({integer, _L, Value}, {Ctx, Acc}) -> 
+    {{erl_syntax:integer(Value), #ast_inf{}}, {Ctx, Acc}};
+ast({string, _L, Value}, {Ctx, Acc}) -> 
+    {{erl_syntax:string(Value), #ast_inf{}}, {Ctx, Acc}}; %% TODO: binary instead of string
+ast({{'[', _L},  Value}, {Ctx, Acc}) -> 
     %% TODO: implementation and tests, this just works for empty lists
-    {{erl_syntax:list(Value), #ast_info{}}, {Context, Scopes}};
-ast({identifier, _L, Name}, {Context, Scopes}) ->  
-    var_name(Name, Context, Scopes);
-ast({{identifier, _L, Name}, Value}, {Context, Scopes}) ->  
-    var_init(Name, Value, Context, Scopes);             
-ast({{var, _L}, DeclarationList}, {Context, Scopes}) ->
-    {Ast, Info, Scopes1} = body_ast(DeclarationList, Context#js_context{action = set}, Scopes),
-    {{Ast, Info}, {Context, Scopes1}};
-ast({return, _L}, {Context, Scopes}) -> 
+    {{erl_syntax:list(Value), #ast_inf{}}, {Ctx, Acc}};
+ast({identifier, _L, Name}, {Ctx, Acc}) ->  
+    var_name(Name, Ctx, Acc);
+ast({{identifier, _L, Name}, Value}, {Ctx, Acc}) ->  
+    var_init(Name, Value, Ctx, Acc);             
+ast({{var, _L}, DeclarationList}, {Ctx, Acc}) ->
+    {Ast, Info, Acc1} = body_ast(DeclarationList, Ctx#js_ctx{action = set}, Acc),
+    {{Ast, Info}, {Ctx, Acc1}};
+ast({return, _L}, {Ctx, Acc}) -> 
     %% TODO: eliminate this clause by adjusting the grammar
-    empty_ast(Context, Scopes);
-ast({{return, _L}, Expression}, {Context, Scopes}) -> 
+    empty_ast(Ctx, Acc);
+ast({{return, _L}, Expression}, {Ctx, Acc}) -> 
     %% TODO: implementation and tests, this just works for return ign literals
-    ast(Expression, {Context, Scopes});
-ast({{function, _L1}, {identifier, _L2, Name}, {params, Params, body, Body}}, {Context, Scopes}) ->
-    func(Name, Params, Body, Context, Scopes);      
-ast({{{identifier, _L, Name}, MemberList}, {'(', Args}}, {Context, Scopes}) ->
-    call(Name, MemberList, Args, Context, Scopes);
-ast({{'=', _}, {identifier, _, Name}, Expression}, {Context, Scopes}) ->  
-    {{LeftAst, _}, {_, Scopes1}} = var_name(Name, Context#js_context{action = set}, Scopes),  
-    {RightAst, Info, _} = body_ast(Expression, Context, Scopes),   
+    ast(Expression, {Ctx, Acc});
+ast({{function, _L1}, {identifier, _L2, Name}, {params, Params, body, Body}}, {Ctx, Acc}) ->
+    func(Name, Params, Body, Ctx, Acc);      
+ast({{{identifier, _L, Name}, MemberList}, {'(', Args}}, {Ctx, Acc}) ->
+    call(Name, MemberList, Args, Ctx, Acc);
+ast({{'=', _}, {identifier, _, Name}, Expression}, {Ctx, Acc}) ->  
+    {{LeftAst, _}, {_, Acc1}} = var_name(Name, Ctx#js_ctx{action = set}, Acc),  
+    {RightAst, Info, _} = body_ast(Expression, Ctx, Acc),   
     Ast = erl_syntax:match_expr(LeftAst, RightAst),  
-    {{Ast, Info}, {Context, Scopes1}};   
-ast({{'*' = Op, _}, L, R}, {Ctx, Scopes}) ->      
-    Ast = op(Op, body_ast(L, Ctx, Scopes), body_ast(R, Ctx, Scopes)),
-    {{Ast, #ast_info{}}, {Ctx, Scopes}};      
-ast({{'/' = Op, _}, L, R}, {Ctx, Scopes}) ->      
-    Ast = op(Op, body_ast(L, Ctx, Scopes), body_ast(R, Ctx, Scopes)),
-    {{Ast, #ast_info{}}, {Ctx, Scopes}};
-ast({{'<<' = Op, _}, L, R}, {Ctx, Scopes}) ->      
-    Ast = op(Op, body_ast(L, Ctx, Scopes), body_ast(R, Ctx, Scopes)),
-    {{Ast, #ast_info{}}, {Ctx, Scopes}};      
-ast({{'>>' = Op, _}, L, R}, {Ctx, Scopes}) ->      
-    Ast = op(Op, body_ast(L, Ctx, Scopes), body_ast(R, Ctx, Scopes)),
-    {{Ast, #ast_info{}}, {Ctx, Scopes}};
-ast({{'+' = Op, _}, L, R}, {Ctx, Scopes}) ->      
-    Ast = op(Op, body_ast(L, Ctx, Scopes), body_ast(R, Ctx, Scopes)),
-    {{Ast, #ast_info{}}, {Ctx, Scopes}};      
-ast({{'-' = Op, _}, L, R}, {Ctx, Scopes}) ->      
-    Ast = op(Op, body_ast(L, Ctx, Scopes), body_ast(R, Ctx, Scopes)),
-    {{Ast, #ast_info{}}, {Ctx, Scopes}};        
-ast({{'<' = Op, _}, L, R}, {Ctx, Scopes}) ->      
-    Ast = op(Op, body_ast(L, Ctx, Scopes), body_ast(R, Ctx, Scopes)),
-    {{Ast, #ast_info{}}, {Ctx, Scopes}};
-ast({{'>' = Op, _}, L, R}, {Ctx, Scopes}) ->      
-    Ast = op(Op, body_ast(L, Ctx, Scopes), body_ast(R, Ctx, Scopes)),
-    {{Ast, #ast_info{}}, {Ctx, Scopes}};      
-ast({{'<=' = Op, _}, L, R}, {Ctx, Scopes}) ->      
-    Ast = op(Op, body_ast(L, Ctx, Scopes), body_ast(R, Ctx, Scopes)),
-    {{Ast, #ast_info{}}, {Ctx, Scopes}};    
-ast({{'>=' = Op, _}, L, R}, {Ctx, Scopes}) ->      
-    Ast = op(Op, body_ast(L, Ctx, Scopes), body_ast(R, Ctx, Scopes)),
-    {{Ast, #ast_info{}}, {Ctx, Scopes}};    
-ast({{'==' = Op, _}, L, R}, {Ctx, Scopes}) ->      
-    Ast = op(Op, body_ast(L, Ctx, Scopes), body_ast(R, Ctx, Scopes)),
-    {{Ast, #ast_info{}}, {Ctx, Scopes}};
-ast({{'!=' = Op, _}, L, R}, {Ctx, Scopes}) ->      
-    Ast = op(Op, body_ast(L, Ctx, Scopes), body_ast(R, Ctx, Scopes)),
-    {{Ast, #ast_info{}}, {Ctx, Scopes}};      
-ast({{'===' = Op, _}, L, R}, {Ctx, Scopes}) ->      
-    Ast = op(Op, body_ast(L, Ctx, Scopes), body_ast(R, Ctx, Scopes)),
-    {{Ast, #ast_info{}}, {Ctx, Scopes}};    
-ast({{'!==' = Op, _}, L, R}, {Ctx, Scopes}) ->      
-    Ast = op(Op, body_ast(L, Ctx, Scopes), body_ast(R, Ctx, Scopes)),
-    {{Ast, #ast_info{}}, {Ctx, Scopes}};     
-ast({{'&' = Op, _}, L, R}, {Ctx, Scopes}) ->      
-    Ast = op(Op, body_ast(L, Ctx, Scopes), body_ast(R, Ctx, Scopes)),
-    {{Ast, #ast_info{}}, {Ctx, Scopes}};    
-ast({{'^' = Op, _}, L, R}, {Ctx, Scopes}) ->      
-    Ast = op(Op, body_ast(L, Ctx, Scopes), body_ast(R, Ctx, Scopes)),
-    {{Ast, #ast_info{}}, {Ctx, Scopes}};
-ast({{'|' = Op, _}, L, R}, {Ctx, Scopes}) ->      
-    Ast = op(Op, body_ast(L, Ctx, Scopes), body_ast(R, Ctx, Scopes)),
-    {{Ast, #ast_info{}}, {Ctx, Scopes}};      
-ast({{'&&' = Op, _}, L, R}, {Ctx, Scopes}) ->      
-    Ast = op(Op, body_ast(L, Ctx, Scopes), body_ast(R, Ctx, Scopes)),
-    {{Ast, #ast_info{}}, {Ctx, Scopes}};    
-ast({{'||' = Op, _}, L, R}, {Ctx, Scopes}) ->      
-    Ast = op(Op, body_ast(L, Ctx, Scopes), body_ast(R, Ctx, Scopes)),
-    {{Ast, #ast_info{}}, {Ctx, Scopes}};
-ast({'cond' = Op, Cond, Expr1, Expr2}, {Ctx, Scopes}) ->      
-    Ast = op(Op, body_ast(Cond, Ctx, Scopes), body_ast(Expr1, Ctx, Scopes), 
-        body_ast(Expr2, Ctx, Scopes)),
-    {{Ast, #ast_info{}}, {Ctx, Scopes}};     
+    {{Ast, Info}, {Ctx, Acc1}};      
+ast({op, {Op, _}, Js1, Js2}, {Ctx, Acc}) ->
+    {E1, _, #tree_acc{names_set = Set1}} = body_ast(Js1, Ctx, Acc),
+    {E2, _, #tree_acc{names_set = Set2}} = body_ast(Js2, Ctx, Acc#tree_acc{names_set = Set1}),
+    E3 = op_ast(Op, E1, E2),
+    {{E3, #ast_inf{}}, {Ctx, Acc#tree_acc{names_set = Set2}}};
+ast({op, 'cond' = Op, Js1, Js2, Js3}, {Ctx, Acc}) ->
+    {E1, _, #tree_acc{names_set = Set1}} = body_ast(Js1, Ctx, Acc),
+    {E2, _, #tree_acc{names_set = Set2}} = body_ast(Js2, Ctx, Acc#tree_acc{names_set = Set1}),
+    {E3, _, #tree_acc{names_set = Set3}} = body_ast(Js3, Ctx, Acc#tree_acc{names_set = Set2}),
+    E4 = op_ast(Op, E1, E2, E3),
+    {{E4, #ast_inf{}}, {Ctx, Acc#tree_acc{names_set = Set3}}};   
 ast(Unknown, _) ->
     throw({error, lists:concat(["Unknown token: ", Unknown])}).
     
  
-empty_ast(Context, Scopes) ->
-    {{[], #ast_info{}}, {Context, Scopes}}.  
+empty_ast(Ctx, Acc) ->
+    {{[], #ast_inf{}}, {Ctx, Acc}}.  
     
       
-var_name(Name, #js_context{action = set} = Context, Scopes) ->
-    Scope = hd(Scopes),
-    Name1 = erl_syntax_lib:new_variable_name(Scope#scope.names_used_set),
-    Names = [Name1 | Scope#scope.names],
-    Set = sets:add_element(Name1, Scope#scope.names_used_set),
-    Dict = dict:store(Name, Name1, Scope#scope.names_dict),
-    Scope1 = #scope{names = Names, names_used_set = Set, names_dict = Dict},
-    {{erl_syntax:variable(Name1), #ast_info{}}, {Context, [Scope1 | tl(Scopes)]}}; 
-var_name(Name, #js_context{action = get} = Context, Scopes) ->
-    case name_search(Name, Scopes, []) of
+var_name(JsName, #js_ctx{action = set} = Ctx, Acc) ->
+    Scope = hd(Acc#tree_acc.scopes),
+    ErlName = erl_syntax_lib:new_variable_name(Acc#tree_acc.names_set), 
+    Dict = dict:store(JsName, ErlName, Scope#scope.names_dict),
+    Acc1 = Acc#tree_acc{names_set = sets:add_element(ErlName, Acc#tree_acc.names_set), 
+        scopes = [#scope{names_dict = Dict} | tl(Acc#tree_acc.scopes)]},
+    {{erl_syntax:variable(ErlName), #ast_inf{}}, {Ctx, Acc1}}; 
+var_name(JsName, #js_ctx{action = get} = Ctx, Acc) ->
+    case name_search(JsName, Acc#tree_acc.scopes, []) of
         undefined ->
-            throw({error, lists:concat(["ReferenceError: ", Name, " is not defined"])});
-        {global, Name1, Scopes1} ->
-            Args = [erl_syntax:atom(Name1)], 
+            throw({error, lists:concat(["ReferenceError: ", JsName, " is not defined"])});
+        {global, Name} ->
+            Args = [erl_syntax:atom(Name)], 
             Ast = erl_syntax:application(none, erl_syntax:atom(get), Args),
-            {{Ast, #ast_info{}}, {Context, Scopes1}};
-        {Name1, Scopes1} ->
-            {{erl_syntax:variable(Name1), #ast_info{}}, {Context, Scopes1}}
+            {{Ast, #ast_inf{}}, {Ctx, Acc}};
+        Name ->
+            {{erl_syntax:variable(Name), #ast_inf{}}, {Ctx, Acc}}
     end.
 
-var_init(Name, [], Context, [GlobalScope]) ->      
-    Names = lists:usort([js_name(Name) | GlobalScope#scope.names]),
-    Dict = dict:store(Name, js_name(Name), GlobalScope#scope.names_dict),
-    GlobalScope1 = #scope{names = Names, names_dict = Dict},
-    Args = [erl_syntax:atom(js_name(Name)), erl_syntax:atom(declared)], 
+var_init(JsName, [], Ctx, #tree_acc{scopes = [GlobalScope]}=Acc) ->      
+    Dict = dict:store(JsName, erl_name(JsName), GlobalScope#scope.names_dict),
+    Args = [erl_syntax:atom(erl_name(JsName)), erl_syntax:atom(declared)], 
+    Ast = erl_syntax:application(none, erl_syntax:atom(put), Args),
+    Acc1 = Acc#tree_acc{scopes=[#scope{names_dict = Dict}]}, 
+    {{[], #ast_inf{global_asts = [Ast]}}, {Ctx, Acc1}}; 
+var_init(JsName, Value, Ctx,  #tree_acc{scopes = [GlobalScope]}=Acc) ->      
+    Dict = dict:store(JsName, erl_name(JsName), GlobalScope#scope.names_dict),
+    Acc2 = Acc#tree_acc{scopes=[#scope{names_dict = Dict}]},
+    {ValueAst, Info1, Acc2} = body_ast(Value, Ctx, Acc2),
+    Args = [erl_syntax:atom(erl_name(JsName)), ValueAst], 
     Ast = erl_syntax:application(none, erl_syntax:atom(put), Args), 
-    {{[], #ast_info{global_asts = [Ast]}}, {Context, [GlobalScope1]}}; 
-var_init(Name, Value, Context, [GlobalScope]) ->
-    Names = lists:usort([js_name(Name) | GlobalScope#scope.names]),
-    Dict = dict:store(Name, js_name(Name), GlobalScope#scope.names_dict),
-    GlobalScope1 = #scope{names = Names, names_dict = Dict},
-    {ValueAst, Info1, Scopes2} = body_ast(Value, Context, [GlobalScope1]),
-    Args = [erl_syntax:atom(js_name(Name)), ValueAst], 
-    Ast = erl_syntax:application(none, erl_syntax:atom(put), Args), 
-    Asts = [Ast | Info1#ast_info.global_asts],
-    {{[], Info1#ast_info{global_asts = Asts}}, {Context, Scopes2}};  
-var_init(Name, [], Context, Scopes) ->
-    {{AstVariable, _}, {_, Scopes1}}  = var_name(Name, Context, Scopes),
+    Asts = [Ast | Info1#ast_inf.global_asts],
+    {{[], Info1#ast_inf{global_asts = Asts}}, {Ctx, Acc2}};  
+var_init(Name, [], Ctx, Acc) ->
+    {{AstVariable, _}, {_, Acc1}}  = var_name(Name, Ctx, Acc),
     Ast = erl_syntax:match_expr(AstVariable, erl_syntax:atom(declared)),  
-    {{Ast, #ast_info{}}, {Context, Scopes1}};  
-var_init(Name, Value, Context, Scopes) ->
-    {{AstVariable, _}, {_, Scopes1}}  = var_name(Name, Context, Scopes),
-    {AstValue, Info, Scopes2} = body_ast(Value, Context, Scopes1),
+    {{Ast, #ast_inf{}}, {Ctx, Acc1}};  
+var_init(Name, Value, Ctx, Acc) ->
+    {{AstVariable, _}, {_, Acc1}}  = var_name(Name, Ctx, Acc),
+    {AstValue, Info, Acc2} = body_ast(Value, Ctx, Acc1),
     Ast = erl_syntax:match_expr(AstVariable, AstValue),  
-    {{Ast, Info}, {Context, Scopes2}}.
+    {{Ast, Info}, {Ctx, Acc2}}.
     
   
 name_search(_, [], _) ->
@@ -361,129 +310,127 @@ name_search(_, [], _) ->
 name_search(Name, [H | T], Acc) ->
     case dict:find(Name, H#scope.names_dict) of
         {ok, Value} ->
-            Scopes = lists:merge(lists:reverse(Acc), [H | T]),
+            %% Scopes = lists:merge(lists:reverse(Acc), [H | T]),   %%% TODO: remove, or what was this good for ?
             case T of
-                [] ->
-                    {global, Value, Scopes};
-                _ ->
-                    {Value, Scopes}
+                [] -> {global, Value};
+                _ -> Value
             end;
-        error ->
-            name_search(Name, T, [H | Acc]) 
+        error -> name_search(Name, T, [H | Acc]) 
     end.
              
             
-func(Name, Params, Body, Context, Scopes) -> 
-    {Params1, _, _} = body_ast(Params, Context, Scopes),          
-    {Ast, Info, _} = body_ast(Body, Context#js_context{global = false}, push(Scopes)),
-    Ast1 = erl_syntax:function(erl_syntax:atom(js_name(Name)),
+func(Name, Params, Body, Ctx, Acc) -> 
+    {Params1, _, _} = body_ast(Params, Ctx, Acc),          
+    {Ast, Inf, _} = body_ast(Body, Ctx#js_ctx{global = false}, push_new_scope(Acc)),
+    Ast1 = erl_syntax:function(erl_syntax:atom(erl_name(Name)),
         [erl_syntax:clause(Params1, none, Ast)]),
-    case Context#js_context.global of
+    case Ctx#js_ctx.global of
         true->
-            Export = erl_syntax:arity_qualifier(erl_syntax:atom(js_name(Name)), 
+            Export = erl_syntax:arity_qualifier(erl_syntax:atom(erl_name(Name)), 
                 erl_syntax:integer(length(Params))),
-            Exports = [Export | Info#ast_info.export_asts], 
-            {{Ast1, Info#ast_info{export_asts = Exports}}, {Context, Scopes}};
+            Exports = [Export | Inf#ast_inf.export_asts], 
+            {{Ast1, Inf#ast_inf{export_asts = Exports}}, {Ctx, Acc}};
         _ ->
-            {{Ast1, Info}, {Context, Scopes}}
+            {{Ast1, Inf}, {Ctx, Acc}}
     end.
 
 
     
-call(Name, MemberList, Args, Context, Scopes) ->
-    {Ast, Scopes2} = case check_call(Name, MemberList) of
+call(Name, MemberList, Args, Ctx, Acc) ->
+    {Ast, Acc2} = case check_call(Name, MemberList) of
         {Module, Function} ->
-            {Args1, _, Scopes1} = body_ast(Args, Context, Scopes),    
+            {Args1, _, Acc1} = body_ast(Args, Ctx, Acc),    
             {erl_syntax:application(erl_syntax:atom(Module), erl_syntax:atom(Function), Args1),
-                Scopes1};
+                Acc1};
         _ ->
             io:format("TRACE ~p:~p DOT ~p~n",[?MODULE, ?LINE, error]),
-            {[], Scopes}
+            {[], Acc}
     end,
-    case Context#js_context.global of
+    case Ctx#js_ctx.global of
         true->
-            {{[], #ast_info{global_asts = [Ast]}}, {Context, Scopes2}};
+            {{[], #ast_inf{global_asts = [Ast]}}, {Ctx, Acc2}};
         _ ->
-            {{Ast, #ast_info{}}, {Context, Scopes2}}
+            {{Ast, #ast_inf{}}, {Ctx, Acc2}}
     end.
+
    
-op('*' = Op, {L, _, _}, {R, _, _}) ->
+op_ast('*' = Op, Ast1, Ast2) ->
+   %% TODO: dynamic typechecking
+   erl_syntax:infix_expr(Ast1, erl_syntax:operator(Op), Ast2);
+op_ast('/' = Op, Ast1, Ast2) ->
     %% TODO: dynamic typechecking
-    erl_syntax:infix_expr(L, erl_syntax:operator(Op), R);
-op('/' = Op, {L, _, _}, {R, _, _}) ->
+    erl_syntax:infix_expr(Ast1, erl_syntax:operator(Op), Ast2);
+op_ast('+' = Op, Ast1, Ast2) ->
     %% TODO: dynamic typechecking
-    erl_syntax:infix_expr(L, erl_syntax:operator(Op), R);
-op('+' = Op, {L, _, _}, {R, _, _}) ->
+    erl_syntax:infix_expr(Ast1, erl_syntax:operator(Op), Ast2);
+op_ast('-' = Op, Ast1, Ast2) ->
     %% TODO: dynamic typechecking
-    erl_syntax:infix_expr(L, erl_syntax:operator(Op), R);
-op('-' = Op, {L, _, _}, {R, _, _}) ->
+    erl_syntax:infix_expr(Ast1, erl_syntax:operator(Op), Ast2);
+op_ast('<<', Ast1, Ast2) ->
     %% TODO: dynamic typechecking
-    erl_syntax:infix_expr(L, erl_syntax:operator(Op), R);
-op('<<', {L, _, _}, {R, _, _}) ->
+    erl_syntax:infix_expr(Ast1, erl_syntax:operator("bsl"), Ast2);
+op_ast('>>', Ast1, Ast2) ->
     %% TODO: dynamic typechecking
-    erl_syntax:infix_expr(L, erl_syntax:operator("bsl"), R);
-op('>>', {L, _, _}, {R, _, _}) ->
+    erl_syntax:infix_expr(Ast1, erl_syntax:operator("bsr"), Ast2);  
+op_ast('<' = Op, Ast1, Ast2) ->
     %% TODO: dynamic typechecking
-    erl_syntax:infix_expr(L, erl_syntax:operator("bsr"), R);    
-op('<' = Op, {L, _, _}, {R, _, _}) ->
+    erl_syntax:infix_expr(Ast1, erl_syntax:operator(Op), Ast2);
+op_ast('>' = Op, Ast1, Ast2) ->
     %% TODO: dynamic typechecking
-    erl_syntax:infix_expr(L, erl_syntax:operator(Op), R);
-op('>' = Op, {L, _, _}, {R, _, _}) ->
+    erl_syntax:infix_expr(Ast1, erl_syntax:operator(Op), Ast2);
+op_ast('<=', Ast1, Ast2) ->
     %% TODO: dynamic typechecking
-    erl_syntax:infix_expr(L, erl_syntax:operator(Op), R);
-op('<=', {L, _, _}, {R, _, _}) ->
+    erl_syntax:infix_expr(Ast1, erl_syntax:operator('=<'), Ast2);
+op_ast('>=' = Op, Ast1, Ast2) ->
     %% TODO: dynamic typechecking
-    erl_syntax:infix_expr(L, erl_syntax:operator('=<'), R);
-op('>=' = Op, {L, _, _}, {R, _, _}) ->
+    erl_syntax:infix_expr(Ast1, erl_syntax:operator(Op), Ast2);
+op_ast('==' = Op, Ast1, Ast2) ->
     %% TODO: dynamic typechecking
-    erl_syntax:infix_expr(L, erl_syntax:operator(Op), R);
-op('==' = Op, {L, _, _}, {R, _, _}) ->
+    erl_syntax:infix_expr(Ast1, erl_syntax:operator(Op), Ast2);
+op_ast('!=', Ast1, Ast2) ->
     %% TODO: dynamic typechecking
-    erl_syntax:infix_expr(L, erl_syntax:operator(Op), R);
-op('!=' , {L, _, _}, {R, _, _}) ->
+    erl_syntax:infix_expr(Ast1, erl_syntax:operator('/='), Ast2);
+op_ast('===', Ast1, Ast2) ->
     %% TODO: dynamic typechecking
-    erl_syntax:infix_expr(L, erl_syntax:operator('/='), R);
-op('===', {L, _, _}, {R, _, _}) ->
+    erl_syntax:infix_expr(Ast1, erl_syntax:operator('=:='), Ast2);
+op_ast('!==', Ast1, Ast2) ->
     %% TODO: dynamic typechecking
-    erl_syntax:infix_expr(L, erl_syntax:operator('=:='), R);
-op('!==', {L, _, _}, {R, _, _}) ->
+    erl_syntax:infix_expr(Ast1, erl_syntax:operator('=/='), Ast2);
+op_ast('&', Ast1, Ast2) ->
     %% TODO: dynamic typechecking
-    erl_syntax:infix_expr(L, erl_syntax:operator('=/='), R);
-op('&', {L, _, _}, {R, _, _}) ->
+    erl_syntax:infix_expr(Ast1, erl_syntax:operator('band'), Ast2);
+op_ast('^', Ast1, Ast2) ->
     %% TODO: dynamic typechecking
-    erl_syntax:infix_expr(L, erl_syntax:operator('band'), R);
-op('^', {L, _, _}, {R, _, _}) ->
+    erl_syntax:infix_expr(Ast1, erl_syntax:operator('bxor'), Ast2);
+op_ast('|' , Ast1, Ast2) ->
     %% TODO: dynamic typechecking
-    erl_syntax:infix_expr(L, erl_syntax:operator('bxor'), R);
-op('|' , {L, _, _}, {R, _, _}) ->
+    erl_syntax:infix_expr(Ast1, erl_syntax:operator('bor'), Ast2);
+op_ast('&&', Ast1, Ast2) ->
     %% TODO: dynamic typechecking
-    erl_syntax:infix_expr(L, erl_syntax:operator('bor'), R);
-op('&&', {L, _, _}, {R, _, _}) ->
+    erl_syntax:infix_expr(Ast1, erl_syntax:operator('and'), Ast2);
+op_ast('||', Ast1, Ast2) ->
     %% TODO: dynamic typechecking
-    erl_syntax:infix_expr(L, erl_syntax:operator('and'), R);
-op('||', {L, _, _}, {R, _, _}) ->
-    %% TODO: dynamic typechecking
-    erl_syntax:infix_expr(L, erl_syntax:operator('or'), R).
+    erl_syntax:infix_expr(Ast1, erl_syntax:operator('or'), Ast2).
     
-op('cond', {Cond, _, _}, {Expr1, _, _}, {Expr2, _, _}) ->
+op_ast('cond', Ast1, Ast2, Ast3) ->
     %% TODO: dynamic typechecking    
-    erl_syntax:case_expr(Cond, [
-        erl_syntax:clause([erl_syntax:atom(true)], none, [Expr1]),
-        erl_syntax:clause([erl_syntax:underscore()], none, [Expr2])]).
+    erl_syntax:case_expr(Ast1, [
+        erl_syntax:clause([erl_syntax:atom(true)], none, [Ast2]),
+        erl_syntax:clause([erl_syntax:underscore()], none, [Ast3])]).
  
         
 merge_info(Info1, Info2) ->
-    #ast_info{
-        export_asts = lists:merge(Info1#ast_info.export_asts, Info2#ast_info.export_asts),
-        global_asts = lists:merge(Info1#ast_info.global_asts, Info2#ast_info.global_asts)}. 
+    #ast_inf{
+        export_asts = lists:merge(Info1#ast_inf.export_asts, Info2#ast_inf.export_asts),
+        global_asts = lists:merge(Info1#ast_inf.global_asts, Info2#ast_inf.global_asts)}. 
     
 
 
-js_name(Name) ->
+erl_name(Name) ->
     lists:concat(["js_", Name]).
             
-push(Scopes) ->
-    [#scope{} | Scopes].
+push_new_scope(Acc) ->
+    Acc#tree_acc{scopes = [#scope{} | Acc#tree_acc.scopes]}.
     
                
 check_call(console, [log])  ->
@@ -492,8 +439,8 @@ check_call(_, _) ->
     error.
     
     
-trace(Module, Line, Title, Content, Context) ->
-    case Context#js_context.verbose of
+trace(Module, Line, Title, Content, Ctx) ->
+    case Ctx#js_ctx.verbose of
         true ->
             io:format("TRACE ~p:~p ~p: ~p~n",[Module, Line, Title, Content]);
         _ ->
