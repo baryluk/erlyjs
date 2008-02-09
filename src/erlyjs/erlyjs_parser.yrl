@@ -156,7 +156,7 @@ SimpleExpression -> identifier  : '$1'.
 SimpleExpression -> regexp : '$1'.
 SimpleExpression -> ParenthesizedExpression : '$1'.
 SimpleExpression -> ArrayLiteral : '$1'.
-ParenthesizedExpression -> '(' Expression ')' : '$1'.
+ParenthesizedExpression -> '(' Expression ')' : '$2'.
 
 %% Function Expressions 
 FunctionExpression -> AnonymousFunction : '$1'.
@@ -324,7 +324,7 @@ VariableInitializer -> '$empty' : [].
 VariableInitializer -> '=' AssignmentExpression : '$2'.
 
 %% Block 
-Block -> '{' BlockStatements '}' : '$1'. 
+Block -> '{' BlockStatements '}' : '$2'. 
 BlockStatements -> '$empty' : [].
 BlockStatements ->  BlockStatements Statement : '$1' ++ ['$2'].
 
@@ -332,8 +332,8 @@ BlockStatements ->  BlockStatements Statement : '$1' ++ ['$2'].
 LabeledStatement -> identifier ':' Statement : {'$1', '$3'}. 
 
 %% If Statement
-IfStatement -> if ParenthesizedExpression Statement  : {'$1', '$2', '$3'}.
-IfStatement -> if ParenthesizedExpression Statement else Statement : {'$1', '$2', '$3', '$4', '$5'}.
+IfStatement -> if ParenthesizedExpression Statement  : {'if', '$2', '$3'}.
+IfStatement -> if ParenthesizedExpression Statement else Statement : {'if', '$2', '$3', '$5'}.
 
 %% Switch Statement  TODO
 SwitchStatement -> switch ParenthesizedExpression '{' '}' : '$1'.
