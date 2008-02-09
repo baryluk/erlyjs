@@ -1,6 +1,6 @@
 // Mandatory. Return here a description of the test case.
 function test_description() {
-    return "Logical OR '||' operator test";
+    return "Logical NOT '!' operator test";
 }
 
 // Mandatory. Return here an array of arguments the testsuite will use 
@@ -21,7 +21,7 @@ function test_assert() {
 // Testsuite invokes this function with the arguments from test_args()
 // and compares the return value with the expected result from test_assert().
 function test() {
-    var a=false, b=false, c;
-    c = a || b;
-    return c;
+    var a="cat";
+    b = !a;
+    return b;
 }

@@ -370,7 +370,7 @@ op_ast('-' = Op, Ast) ->
     erl_syntax:infix_expr(erl_syntax:integer(0), erl_syntax:operator(Op), Ast);
 op_ast('~', Ast) ->
     %% TODO: dynamic typechecking and implemenntation
-    erl_syntax:infix_expr(erl_syntax:nil(), erl_syntax:operator('bnot'), Ast);   
+    erl_syntax:prefix_expr(erl_syntax:operator('bnot'), Ast);   
 op_ast('!', Ast) ->
     erl_syntax:case_expr(Ast, [
         erl_syntax:clause([erl_syntax:atom(false)], none, [erl_syntax:atom(true)]),

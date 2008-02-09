@@ -124,7 +124,7 @@ Terminals
     identifier regexp function var instanceof in if else switch do while for case default
     continue finally catch
     '+' '-' '*' '/' '%' ':' '~' '!' '*=' '/=' '%=' '+=' '-=' '<<=' '>>=' '>>>='
-    '&=' '^=' '|=' '=' ';' '?' '<<' '>>' '>>>' '<<<' '<' '>' 
+    '&=' '^=' '|=' '=' ';' '?' '<<' '>>' '>>>' '<' '>' 
     '(' ')' '[' ']' '.' ',' '++' '--' '&&' '===' '==' '<=' '>=' '!=' '!==' 
     '{' '}' '&' '^' '||' '|'
     .
@@ -203,11 +203,11 @@ PostfixExpression -> LeftSideExpression : '$1'.
 PostfixExpression -> LeftSideExpression '++' : '$1'. 
 PostfixExpression -> LeftSideExpression '--' : '$1'.
 
-%% Unary Operators % TODO
+%% Unary Operators
 UnaryExpression -> PostfixExpression : '$1'.
-UnaryExpression -> delete LeftSideExpression : {op, '$1', '$2'}.
-UnaryExpression -> void UnaryExpression : {op, '$1', '$2'}.
-UnaryExpression -> typeof UnaryExpression : {op, '$1', '$2'}.
+UnaryExpression -> delete LeftSideExpression : {op, '$1', '$2'}. % TODO
+UnaryExpression -> void UnaryExpression : {op, '$1', '$2'}. % TODO
+UnaryExpression -> typeof UnaryExpression : {op, '$1', '$2'}. % TODO
 UnaryExpression -> '++' LeftSideExpression : {op, '$1', '$2'}.
 UnaryExpression -> '--' LeftSideExpression : {op, '$1', '$2'}.
 UnaryExpression -> '+' UnaryExpression : {op, '$1', '$2'}.
@@ -278,7 +278,7 @@ CompoundAssignment -> '+=' : '$1'.
 CompoundAssignment -> '-=' : '$1'. 
 CompoundAssignment -> '<<=' : '$1'. 
 CompoundAssignment -> '>>=' : '$1'. 
-CompoundAssignment -> '>>>=' : '$1'. 
+CompoundAssignment -> '>>>=' : '$1'. % TODO
 CompoundAssignment -> '&=' : '$1'. 
 CompoundAssignment -> '^=' : '$1'. 
 CompoundAssignment -> '|=' : '$1'. 

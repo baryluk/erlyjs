@@ -134,7 +134,7 @@ test(File, Verbose) ->
 	    ok ->
 	        ProcessDict = get(),
 	        M = list_to_atom(Module),
-	        Expected = M:js_test_result(),
+	        Expected = M:js_test_assert(),
 	        Args = M:js_test_args(),
 	        M:jsinit(),
 	        Result = case catch apply(M, js_test, Args) of

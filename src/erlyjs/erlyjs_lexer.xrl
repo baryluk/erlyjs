@@ -98,6 +98,7 @@ Rules.
 \[ :                  {token,{'[',TokenLine}}.
 \] :                  {token,{']',TokenLine}}.
 \% :                  {token,{'%',TokenLine}}.
+\~ :                  {token,{'~',TokenLine}}.
 
 
 %% multi character operators
