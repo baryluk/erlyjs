@@ -236,7 +236,10 @@ ast({{return, _L}, Expression}, {Ctx, Acc}) ->
 ast({{function, _L1}, {identifier, _L2, Name}, {params, Params, body, Body}}, {Ctx, Acc}) ->
     func(Name, Params, Body, Ctx, Acc);      
 ast({{{identifier, _L, Name}, MemberList}, {'(', Args}}, {Ctx, Acc}) ->
-    call(Name, MemberList, Args, Ctx, Acc);     
+    call(Name, MemberList, Args, Ctx, Acc);  
+ast({op, {Op, _}, In}, {Ctx, Acc}) ->
+    {Out, _, #tree_acc{names_set = Set}} = body_ast(In, Ctx, Acc),
+    {{op_ast(Op, Out), #ast_inf{}}, {Ctx, Acc#tree_acc{names_set = Set}}};
 ast({op, {Op, _}, In1, In2}, {Ctx, Acc}) ->
     {Out1, _, #tree_acc{names_set = Set1}} = body_ast(In1, Ctx, Acc),
     {Out2, _, #tree_acc{names_set = Set2}} = body_ast(In2, Ctx, Acc#tree_acc{names_set = Set1}),
@@ -257,6 +260,8 @@ ast({assign, {Op, _}, {identifier, _, Name}, In1}, {Ctx, Acc}) ->
     {{assign_ast('=', Out3, op_ast(assign_to_op(Op), Out1, Out2)), Inf}, {Ctx, Acc2}};    
 ast(Unknown, _) ->
     throw({error, lists:concat(["Unknown token: ", Unknown])}). 
+    
+    
 empty_ast(Ctx, Acc) ->
     {{[], #ast_inf{}}, {Ctx, Acc}}.  
     
@@ -352,11 +357,28 @@ call(Name, MemberList, Args, Ctx, Acc) ->
         _ ->
             {{Ast, #ast_inf{}}, {Ctx, Acc2}}
     end.
-
    
+   
+op_ast('++', Ast) ->
+    %% TODO: dynamic typechecking and implemenntation
+    erl_syntax:infix_expr(Ast, erl_syntax:operator('+'), erl_syntax:integer(1));
+op_ast('--', Ast) ->
+    %% TODO: dynamic typechecking and implemenntation
+    erl_syntax:infix_expr(Ast, erl_syntax:operator('-'), erl_syntax:integer(1));
+op_ast('-' = Op, Ast) ->
+    %% TODO: dynamic typechecking and implemenntation
+    erl_syntax:infix_expr(erl_syntax:integer(0), erl_syntax:operator(Op), Ast);
+op_ast('~', Ast) ->
+    %% TODO: dynamic typechecking and implemenntation
+    erl_syntax:infix_expr(erl_syntax:nil(), erl_syntax:operator('bnot'), Ast);   
+op_ast('!', Ast) ->
+    erl_syntax:case_expr(Ast, [
+        erl_syntax:clause([erl_syntax:atom(false)], none, [erl_syntax:atom(true)]),
+        erl_syntax:clause([erl_syntax:underscore()], none, [erl_syntax:atom(false)])]).
+        
 op_ast('*' = Op, Ast1, Ast2) ->
-   %% TODO: dynamic typechecking
-   erl_syntax:infix_expr(Ast1, erl_syntax:operator(Op), Ast2);
+    %% TODO: dynamic typechecking
+    erl_syntax:infix_expr(Ast1, erl_syntax:operator(Op), Ast2);
 op_ast('/' = Op, Ast1, Ast2) ->
     %% TODO: dynamic typechecking
     erl_syntax:infix_expr(Ast1, erl_syntax:operator(Op), Ast2);
@@ -375,8 +397,12 @@ op_ast('<<', Ast1, Ast2) ->
 op_ast('>>', Ast1, Ast2) ->
     %% TODO: dynamic typechecking
     erl_syntax:infix_expr(Ast1, erl_syntax:operator("bsr"), Ast2);  
-op_ast('>>>', Ast1, Ast2) ->
+op_ast('>>>', _Ast1, _Ast2) ->
     %% TODO: implementation and dynamic typechecking
+    %% right-shift 9 with 2 
+    %% <<Val:30, Ignore:2>> = <<9:32>>.
+    %% Result = <<0:2, Val:30>>.  
+    %% how do we handle negatie numbers (two complement format) ?
     erl_syntax:atom(not_implemented_yet);    
 op_ast('<' = Op, Ast1, Ast2) ->
     %% TODO: dynamic typechecking

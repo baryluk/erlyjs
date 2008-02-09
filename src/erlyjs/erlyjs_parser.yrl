@@ -205,15 +205,15 @@ PostfixExpression -> LeftSideExpression '--' : '$1'.
 
 %% Unary Operators % TODO
 UnaryExpression -> PostfixExpression : '$1'.
-UnaryExpression -> delete LeftSideExpression : '$1'.
-UnaryExpression -> void UnaryExpression : '$1'.
-UnaryExpression -> typeof UnaryExpression : '$1'.
-UnaryExpression -> '++' LeftSideExpression : '$1'.
-UnaryExpression -> '--' LeftSideExpression : '$1'.
-UnaryExpression -> '+' UnaryExpression : '$1'.
-UnaryExpression -> '-' UnaryExpression : {op, '-', '$2'}.
-UnaryExpression -> '~' UnaryExpression : {op, 'bnot', '$2'}.
-UnaryExpression -> '!' UnaryExpression : '$1'.
+UnaryExpression -> delete LeftSideExpression : {op, '$1', '$2'}.
+UnaryExpression -> void UnaryExpression : {op, '$1', '$2'}.
+UnaryExpression -> typeof UnaryExpression : {op, '$1', '$2'}.
+UnaryExpression -> '++' LeftSideExpression : {op, '$1', '$2'}.
+UnaryExpression -> '--' LeftSideExpression : {op, '$1', '$2'}.
+UnaryExpression -> '+' UnaryExpression : {op, '$1', '$2'}.
+UnaryExpression -> '-' UnaryExpression : {op, '$1', '$2'}.
+UnaryExpression -> '~' UnaryExpression : {op, '$1', '$2'}.
+UnaryExpression -> '!' UnaryExpression : {op, '$1', '$2'}.
 
 
 %% Multiplicative Operators
