@@ -10,7 +10,7 @@ function test_args() {
 }
 
 // Mandatory. Return here the expected test result.
-function test_assert() {
+function test_ok() {
     return 4;
 }
 
@@ -19,7 +19,7 @@ function test_assert() {
 
 // Mandatory. The actual test. 
 // Testsuite invokes this function with the arguments from test_args()
-// and compares the return value with the expected result from test_assert().
+// and compares the return value with the expected result from test_ok().
 function test() {
     var a=16, b=2, c;
     c = a >> b;

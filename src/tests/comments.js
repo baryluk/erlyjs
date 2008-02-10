@@ -10,7 +10,7 @@ function test_args() {
 }
 
 // Mandatory. Provide here the expected test result. 
-function test_assert() {
+function test_ok() {
     return 6;
 }
 

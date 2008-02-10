@@ -1,6 +1,6 @@
 // Mandatory. Return here a description of the test case.
 function test_description() {
-    return "Global variable declaration";
+    return "If statement";
 }
 
 // Mandatory. Return here an array of arguments the testsuite will use 
@@ -11,11 +11,15 @@ function test_args() {
 
 // Mandatory. Return here the expected test result. 
 function test_ok() {
-    return 5;
+    return 3;
 }
 
 // Optional. Provide here any global code.
-var a = 5;
+
+var a=2;
+
+if (true)  
+    a += 1;
 
 // Mandatory. The actual test. 
 // Testsuite invokes this function with the arguments from test_args()
@@ -23,3 +27,6 @@ var a = 5;
 function test() {
     return a;
 }
+
+
+
