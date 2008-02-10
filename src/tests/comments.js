@@ -1,6 +1,6 @@
 // Mandatory. Provide here a description of the test case.
 function test_description() {
-    return "";
+    return "Line and multiline comments";
 }
 
 // Mandatory. Provide here the arguments the testsuite will use 

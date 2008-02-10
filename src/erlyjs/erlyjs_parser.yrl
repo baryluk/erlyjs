@@ -164,7 +164,7 @@ FunctionExpression -> NamedFunction : '$1'.
 
 %% Object Literals TODO
 ObjectLiteral -> '{' '}' : '$1'. 
-ObjectLiteral -> '{' FieldList '}'  : '$1'. 
+ObjectLiteral -> '{' FieldList '}'  : '$2'. 
 FieldList -> LiteralField : ['$1'].
 FieldList -> FieldList ',' LiteralField : '$1' ++ ['$3'].
 LiteralField -> identifier ':' AssignmentExpression : '$1'.
@@ -325,8 +325,8 @@ VariableInitializer -> '=' AssignmentExpression : '$2'.
 
 %% Block 
 Block -> '{' BlockStatements '}' : '$2'. 
-BlockStatements -> '$empty' : [].
-BlockStatements ->  BlockStatements Statement : '$1' ++ ['$2'].
+BlockStatements -> Statement : ['$1'].
+BlockStatements ->  BlockStatements  Statement : '$1' ++ ['$2'].    
 
 %% Labeled Statements 
 LabeledStatement -> identifier ':' Statement : {'$1', '$3'}. 
@@ -334,6 +334,7 @@ LabeledStatement -> identifier ':' Statement : {'$1', '$3'}.
 %% If Statement
 IfStatement -> if ParenthesizedExpression Statement  : {'if', '$2', '$3'}.
 IfStatement -> if ParenthesizedExpression Statement else Statement : {'if', '$2', '$3', '$5'}.
+
 
 %% Switch Statement  TODO
 SwitchStatement -> switch ParenthesizedExpression '{' '}' : '$1'.
@@ -390,7 +391,8 @@ FinallyClause -> finally Block : '$1'.
 FunctionDefinition -> NamedFunction : '$1'.
 AnonymousFunction -> function FormalParametersAndBody : {'$1'}.
 NamedFunction -> function identifier FormalParametersAndBody : { '$1', '$2', '$3'}.
-FormalParametersAndBody -> '(' FormalParameters ')' '{' TopStatements '}' : { params, '$2', body, '$5'}.
+%% FormalParametersAndBody -> '(' FormalParameters ')' '{' TopStatements '}' : { params, '$2', body, '$5'}.
+FormalParametersAndBody -> '(' FormalParameters ')' Block : { params, '$2', body, '$4'}.
 FormalParameters -> '$empty' : [].
 FormalParameters -> identifier : ['$1'].
 FormalParameters -> FormalParameters ',' identifier : '$1' ++ ['$3'].

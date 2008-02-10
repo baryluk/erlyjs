@@ -11,7 +11,7 @@ function test_args() {
 
 // Mandatory. Return here the expected test result. 
 function test_assert() {
-    return 3;
+    return 2;
 }
 
 // Optional. Provide here any global code.
@@ -21,8 +21,8 @@ function test_assert() {
 // Testsuite invokes this function with the arguments from test_args()
 // and compares the return value with the expected result from test_assert().
 function test() {
-    var a=2, b=3;
-    if (true)  
-        a = b; 
+    var a=2;
+    if (false)  
+        a += 1; 
     return a;
 }

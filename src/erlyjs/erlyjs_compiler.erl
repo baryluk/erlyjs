@@ -204,7 +204,7 @@ body_ast(JsParseTree, Ctx, Acc) when is_list(JsParseTree) ->
             ({XAst, XInf}, InfAcc) ->
                 {XAst, merge_info(XInf, InfAcc)}
         end, #ast_inf{}, AstInfList),
-    {lists:flatten(AstList), Inf, Acc1};     
+    {lists:flatten(AstList), Inf, Acc1};
 body_ast(JsParseTree, Ctx, Acc) ->
     {{Ast, Inf}, {_, Acc1}} = ast(JsParseTree, {Ctx, Acc}),
     {Ast, Inf, Acc1}.
@@ -216,7 +216,7 @@ ast({identifier, _L, false}, {Ctx, Acc}) ->
     {{erl_syntax:atom(false), #ast_inf{}}, {Ctx, Acc}};    
 ast({integer, _L, Value}, {Ctx, Acc}) -> 
     {{erl_syntax:integer(Value), #ast_inf{}}, {Ctx, Acc}};
-ast({string, _L, Value}, {Ctx, Acc}) -> 
+ast({string, _L, Value}, {Ctx, Acc}) ->
     {{erl_syntax:string(Value), #ast_inf{}}, {Ctx, Acc}}; %% TODO: binary instead of string
 ast({{'[', _L},  Value}, {Ctx, Acc}) -> 
     %% TODO: implementation and tests, this just works for empty lists
@@ -261,27 +261,31 @@ ast({assign, {Op, _}, {identifier, _, Name}, In1}, {Ctx, Acc}) ->
     {{assign_ast('=', Out3, op_ast(assign_to_op(Op), Out1, Out2)), Inf}, {Ctx, Acc2}}; 
 ast({'if', Cond, If}, {Ctx, Acc}) -> 
     {OutCond, _, #tree_acc{names_set = Set1}} = body_ast(Cond, Ctx, Acc),
-    {OutIf, _, Acc1} = body_ast(If, Ctx, Acc#tree_acc{names_set = Set1, var_pairs = [[] | Acc#tree_acc.var_pairs]}),
-    VarPairs = hd(Acc1#tree_acc.var_pairs),
-    ReturnVarsIf = erl_syntax:tuple([erl_syntax:variable(X) || {_, X} <- VarPairs]),   
-    ReturnVarsElse = erl_syntax:tuple(lists:map(
+    {OutIf, _, Acc1} = body_ast(If, Ctx, Acc#tree_acc{names_set = Set1, var_pairs = [dict:new() | Acc#tree_acc.var_pairs]}),
+    ReturnVarsIf = erl_syntax:tuple(dict:fold(
         fun
-            ({X, _}) ->
-                {{Ast, _}, {_, _}} = var_name(X, Ctx, Acc),
-                Ast
-        end,  VarPairs)),                                  
-    {Vars, Acc4} = lists:mapfoldl(
+            (_, Val, AccIn) -> 
+                [erl_syntax:variable(Val) | AccIn]
+        end, [], hd(Acc1#tree_acc.var_pairs))),          
+    ReturnVarsElse = erl_syntax:tuple(dict:fold(
         fun
-            ({X, _}, Acc2) ->
-                {{Ast, _}, {_, Acc3}} = var_name(X, Ctx#js_ctx{action = set}, Acc2),
-                {Ast, Acc3}
-        end,  Acc1, VarPairs),   
+            (Key, _, AccIn) -> 
+                {{Ast, _}, {_, _}} = var_name(Key, Ctx, Acc),
+                [Ast| AccIn]
+        end, [], hd(Acc1#tree_acc.var_pairs))),                                     
+    {Vars, Acc2} = lists:mapfoldl(
+        fun
+            ({Key, _}, AccIn) ->
+                {{Ast, _}, {_, AccOut}} = var_name(Key, Ctx#js_ctx{action = set}, AccIn),
+                {Ast, AccOut}
+        end,  Acc1, dict:to_list(hd(Acc1#tree_acc.var_pairs))),    
     Stmt = erl_syntax:case_expr(OutCond, [
-        erl_syntax:clause([erl_syntax:atom(true)], none, [OutIf, ReturnVarsIf]),
+        erl_syntax:clause([erl_syntax:atom(true)], none, merge_asts(OutIf, ReturnVarsIf)),
         erl_syntax:clause([erl_syntax:underscore()], none, [ReturnVarsElse])]),
     Out = erl_syntax:match_expr(erl_syntax:tuple(Vars), Stmt),
-    {{Out, #ast_inf{}}, {Ctx, Acc4#tree_acc{var_pairs = tl(Acc4#tree_acc.var_pairs)}}};
-ast({'if', Cond, If, Else}, {Ctx, Acc}) ->  
+    {{Out, #ast_inf{}}, {Ctx, Acc2#tree_acc{var_pairs = tl(Acc2#tree_acc.var_pairs)}}};
+ast({'if', Cond, If, Else}, {Ctx, Acc}) -> 
+    %%  TODO: does not work yet
     {OutCond, _, #tree_acc{names_set = Set1}} = body_ast(Cond, Ctx, Acc),
     {OutIf, Inf, Acc1} = body_ast(If, Ctx, Acc#tree_acc{names_set = Set1, var_pairs = [[] | Acc#tree_acc.var_pairs]}),
     {OutElse, Inf2, Acc2} = body_ast(Else, Ctx, Acc1),
@@ -295,8 +299,8 @@ ast({'if', Cond, If, Else}, {Ctx, Acc}) ->
                 {Ast, Acc4}
         end,  Acc2, VarPairs),    
     Stmt = erl_syntax:case_expr(OutCond, [
-        erl_syntax:clause([erl_syntax:atom(true)], none, [OutIf, ReturnVars]),
-        erl_syntax:clause([erl_syntax:underscore()], none, [OutElse, ReturnVars])]),
+        erl_syntax:clause([erl_syntax:atom(true)], none, merge_asts(OutIf, ReturnVars)),
+        erl_syntax:clause([erl_syntax:underscore()], none, merge_asts(OutElse, ReturnVars))]),
     Out = erl_syntax:match_expr(erl_syntax:tuple(Vars), Stmt),
     {{Out, Inf}, {Ctx, Acc5#tree_acc{var_pairs = tl(Acc5#tree_acc.var_pairs)}}};   
 ast(Unknown, _) ->
@@ -311,15 +315,15 @@ var_name(JsName, #js_ctx{action = set} = Ctx, Acc) ->
     Scope = hd(Acc#tree_acc.js_scopes),
     ErlName = erl_syntax_lib:new_variable_name(Acc#tree_acc.names_set), 
     Dict = dict:store(JsName, ErlName, Scope#scope.names_dict),
-    ErlStacks = case Acc#tree_acc.var_pairs of
+    VarPairs = case Acc#tree_acc.var_pairs of
         [] ->
             [];
         Val ->
-            [[{JsName, ErlName} | hd(Val)] | tl(Val)]
+            [dict:store(JsName, ErlName, hd(Val)) | tl(Val)]
     end,
     Acc1 = Acc#tree_acc{names_set = sets:add_element(ErlName, Acc#tree_acc.names_set), 
         js_scopes = [#scope{names_dict = Dict} | tl(Acc#tree_acc.js_scopes)],
-        var_pairs = ErlStacks},
+        var_pairs = VarPairs},
     {{erl_syntax:variable(ErlName), #ast_inf{}}, {Ctx, Acc1}}; 
 var_name(JsName, #js_ctx{action = get} = Ctx, Acc) ->
     case name_search(JsName, Acc#tree_acc.js_scopes, []) of
@@ -399,8 +403,9 @@ call(Name, MemberList, Args, Ctx, Acc) ->
             io:format("TRACE ~p:~p DOT ~p~n",[?MODULE, ?LINE, error]),
             {[], Acc}
     end,
+    %% TODO replace with maybe_global
     case Ctx#js_ctx.global of
-        true->
+        true ->
             {{[], #ast_inf{global_asts = [Ast]}}, {Ctx, Acc2}};
         _ ->
             {{Ast, #ast_inf{}}, {Ctx, Acc2}}
@@ -509,7 +514,23 @@ assign_ast('=', Ast1, Ast2) ->
 assign_ast(Unknown, _, _) ->    
     throw({error, lists:concat(["Unknown assignment operator: ", Unknown])}).        
  
-        
+
+maybe_global({{Ast, Inf}, {#js_ctx{global = true} = Ctx, Acc}}) ->
+    {{[], Inf#ast_inf{global_asts = [Ast]}}, {Ctx, Acc}};
+maybe_global({AstInf, CtxAcc}) ->    
+    {AstInf, CtxAcc}.
+    
+    
+merge_asts(Ast1, Ast2) when is_list(Ast1), is_list(Ast2) ->
+    lists:merge(Ast1, Ast2);
+merge_asts(Ast1, Ast2) when is_list(Ast1) ->
+    lists:merge(Ast1, [Ast2]);
+merge_asts(Ast1, Ast2) when is_list(Ast2) ->
+    lists:merge([Ast1], Ast2);
+merge_asts(Ast1, Ast2) ->
+    [Ast1, Ast2].
+    
+                           
 merge_info(Info1, Info2) ->
     #ast_inf{
         export_asts = lists:merge(Info1#ast_inf.export_asts, Info2#ast_inf.export_asts),
