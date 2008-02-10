@@ -232,34 +232,35 @@ ast({return, _L}, {Ctx, Acc}) ->
     %% TODO: eliminate this clause by adjusting the grammar
     empty_ast(Ctx, Acc);
 ast({{return, _L}, Expression}, {Ctx, Acc}) -> 
-    %% TODO: implementation and tests, this just works for return ign literals
+    %% TODO: implementation and tests, this just works for returning literals
     ast(Expression, {Ctx, Acc});
 ast({{function, _L1}, {identifier, _L2, Name}, {params, Params, body, Body}}, {Ctx, Acc}) ->
     func(Name, Params, Body, Ctx, Acc);      
 ast({{{identifier, _L, Name}, MemberList}, {'(', Args}}, {Ctx, Acc}) ->
-    call(Name, MemberList, Args, Ctx, Acc);  
+    maybe_global(call(Name, MemberList, Args, Ctx, Acc));  
 ast({op, {Op, _}, In}, {Ctx, Acc}) ->
     {Out, _, #tree_acc{names_set = Set}} = body_ast(In, Ctx, Acc),
-    {{op_ast(Op, Out), #ast_inf{}}, {Ctx, Acc#tree_acc{names_set = Set}}};
+    maybe_global({{op_ast(Op, Out), #ast_inf{}}, {Ctx, Acc#tree_acc{names_set = Set}}});
 ast({op, {Op, _}, In1, In2}, {Ctx, Acc}) ->
     {Out1, _, #tree_acc{names_set = Set1}} = body_ast(In1, Ctx, Acc),
     {Out2, _, #tree_acc{names_set = Set2}} = body_ast(In2, Ctx, Acc#tree_acc{names_set = Set1}),
-    {{op_ast(Op, Out1, Out2), #ast_inf{}}, {Ctx, Acc#tree_acc{names_set = Set2}}};
+    maybe_global({{op_ast(Op, Out1, Out2), #ast_inf{}}, {Ctx, Acc#tree_acc{names_set = Set2}}});
 ast({op, Op, In1, In2, In3}, {Ctx, Acc}) ->
     {Out1, _, #tree_acc{names_set = Set1}} = body_ast(In1, Ctx, Acc),
     {Out2, _, #tree_acc{names_set = Set2}} = body_ast(In2, Ctx, Acc#tree_acc{names_set = Set1}),
     {Out3, _, #tree_acc{names_set = Set3}} = body_ast(In3, Ctx, Acc#tree_acc{names_set = Set2}),
-    {{op_ast(Op, Out1, Out2, Out3), #ast_inf{}}, {Ctx, Acc#tree_acc{names_set = Set3}}}; 
-ast({assign, {'=' = Op, _}, {identifier, _, Name}, In1}, {Ctx, Acc}) ->  
+    maybe_global({{op_ast(Op, Out1, Out2, Out3), #ast_inf{}}, {Ctx, Acc#tree_acc{names_set = Set3}}}); 
+ast({assign, {'=', _}, {identifier, _, Name}, In1}, {Ctx, Acc}) ->  
     {{Out1, _}, {_, Acc1}} = var_name(Name, Ctx#js_ctx{action = set}, Acc),  
-    {Out2, Inf, _} = body_ast(In1, Ctx, Acc), 
-    {{assign_ast(Op, Out1, Out2), Inf}, {Ctx, Acc1}};   
+    {Out2, _, _} = body_ast(In1, Ctx, Acc),  
+    assign_ast('=', Name, Out1, Out2, Ctx, Acc1);
 ast({assign, {Op, _}, {identifier, _, Name}, In1}, {Ctx, Acc}) ->  
     {{Out1, _}, _} = var_name(Name, Ctx, Acc),  
-    {Out2, Inf, Acc1} = body_ast(In1, Ctx, Acc),    
+    {Out2, _, Acc1} = body_ast(In1, Ctx, Acc),    
     {{Out3, _}, {_, Acc2}} = var_name(Name, Ctx#js_ctx{action = set}, Acc1), 
-    {{assign_ast('=', Out3, op_ast(assign_to_op(Op), Out1, Out2)), Inf}, {Ctx, Acc2}}; 
+    assign_ast('=', Name, Out3, op_ast(assign_to_op(Op), Out1, Out2), Ctx, Acc2);
 ast({'if', Cond, If}, {Ctx, Acc}) -> 
+    %% TODO: handle global scope
     {OutCond, _, #tree_acc{names_set = Set1}} = body_ast(Cond, Ctx, Acc),
     {OutIf, _, Acc1} = body_ast(If, Ctx, Acc#tree_acc{names_set = Set1, var_pairs = [dict:new() | Acc#tree_acc.var_pairs]}),
     ReturnVarsIf = erl_syntax:tuple(dict:fold(
@@ -285,6 +286,7 @@ ast({'if', Cond, If}, {Ctx, Acc}) ->
     Out = erl_syntax:match_expr(erl_syntax:tuple(Vars), Stmt),
     {{Out, #ast_inf{}}, {Ctx, Acc2#tree_acc{var_pairs = tl(Acc2#tree_acc.var_pairs)}}};
 ast({'if', Cond, If, Else}, {Ctx, Acc}) -> 
+    %% TODO: handle global scope
     {OutCond, _, #tree_acc{names_set = Set}} = body_ast(Cond, Ctx, Acc),
     {OutIf, _, #tree_acc{names_set = Set1} = Acc1} = body_ast(If, Ctx, Acc#tree_acc{names_set = Set, var_pairs = [dict:new() | Acc#tree_acc.var_pairs]}),   
     {OutElse, _, Acc2} = body_ast(Else, Ctx, Acc#tree_acc{names_set = Set1, var_pairs = [dict:new() | Acc#tree_acc.var_pairs]}),
@@ -360,16 +362,16 @@ var_name(JsName, #js_ctx{action = get} = Ctx, Acc) ->
     end.
 
 var_declare(JsName, [], Ctx, #tree_acc{js_scopes = [GlobalScope]}=Acc) ->      
-    Dict = dict:store(JsName, erl_name(JsName), GlobalScope#scope.names_dict),
-    Args = [erl_syntax:atom(erl_name(JsName)), erl_syntax:atom(declared)], 
+    Dict = dict:store(JsName, prefix_name(JsName), GlobalScope#scope.names_dict),
+    Args = [erl_syntax:atom(prefix_name(JsName)), erl_syntax:atom(declared)], 
     Ast = erl_syntax:application(none, erl_syntax:atom(put), Args),
     Acc1 = Acc#tree_acc{js_scopes=[#scope{names_dict = Dict}]}, 
     {{[], #ast_inf{global_asts = [Ast]}}, {Ctx, Acc1}}; 
 var_declare(JsName, Value, Ctx,  #tree_acc{js_scopes = [GlobalScope]}=Acc) ->      
-    Dict = dict:store(JsName, erl_name(JsName), GlobalScope#scope.names_dict),
+    Dict = dict:store(JsName, prefix_name(JsName), GlobalScope#scope.names_dict),
     Acc2 = Acc#tree_acc{js_scopes=[#scope{names_dict = Dict}]},
     {ValueAst, Info1, Acc2} = body_ast(Value, Ctx, Acc2),
-    Args = [erl_syntax:atom(erl_name(JsName)), ValueAst], 
+    Args = [erl_syntax:atom(prefix_name(JsName)), ValueAst], 
     Ast = erl_syntax:application(none, erl_syntax:atom(put), Args), 
     Asts = [Ast | Info1#ast_inf.global_asts],
     {{[], Info1#ast_inf{global_asts = Asts}}, {Ctx, Acc2}};  
@@ -389,9 +391,9 @@ name_search(_, [], _) ->
 name_search(Name, [H | T], Acc) ->
     case dict:find(Name, H#scope.names_dict) of
         {ok, Value} ->
-            %% Scopes = lists:merge(lists:reverse(Acc), [H | T]),   %%% TODO: remove, or what was this good for ?
             case T of
-                [] -> {global, Value};
+                [] -> 
+                    {global, prefix_name(Name)};
                 _ -> Value
             end;
         error -> name_search(Name, T, [H | Acc]) 
@@ -401,11 +403,11 @@ name_search(Name, [H | T], Acc) ->
 func(Name, Params, Body, Ctx, Acc) -> 
     {Params1, _, _} = body_ast(Params, Ctx, Acc),          
     {Ast, Inf, _} = body_ast(Body, Ctx#js_ctx{global = false}, push_new_scope(Acc)),
-    Ast1 = erl_syntax:function(erl_syntax:atom(erl_name(Name)),
+    Ast1 = erl_syntax:function(erl_syntax:atom(prefix_name(Name)),
         [erl_syntax:clause(Params1, none, Ast)]),
     case Ctx#js_ctx.global of
         true->
-            Export = erl_syntax:arity_qualifier(erl_syntax:atom(erl_name(Name)), 
+            Export = erl_syntax:arity_qualifier(erl_syntax:atom(prefix_name(Name)), 
                 erl_syntax:integer(length(Params))),
             Exports = [Export | Inf#ast_inf.export_asts], 
             {{Ast1, Inf#ast_inf{export_asts = Exports}}, {Ctx, Acc}};
@@ -416,23 +418,15 @@ func(Name, Params, Body, Ctx, Acc) ->
 
     
 call(Name, MemberList, Args, Ctx, Acc) ->
-    {Ast, Acc2} = case check_call(Name, MemberList) of
+    case check_call(Name, MemberList) of
         {Module, Function} ->
             {Args1, _, Acc1} = body_ast(Args, Ctx, Acc),    
-            {erl_syntax:application(erl_syntax:atom(Module), erl_syntax:atom(Function), Args1),
-                Acc1};
+            Ast = erl_syntax:application(erl_syntax:atom(Module), erl_syntax:atom(Function), Args1),
+            {{Ast, #ast_inf{}}, {Ctx, Acc1}};
         _ ->
-            io:format("TRACE ~p:~p DOT ~p~n",[?MODULE, ?LINE, error]),
-            {[], Acc}
-    end,
-    %% TODO replace with maybe_global
-    case Ctx#js_ctx.global of
-        true ->
-            {{[], #ast_inf{global_asts = [Ast]}}, {Ctx, Acc2}};
-        _ ->
-            {{Ast, #ast_inf{}}, {Ctx, Acc2}}
+            throw({error, lists:concat(["No such function: ", todo_prettyprint_functionname])})
     end.
-   
+
    
 op_ast('++', Ast) ->
     %% TODO: dynamic typechecking and implemenntation
@@ -530,12 +524,18 @@ op_ast(Unknown, _, _, _) ->
     throw({error, lists:concat(["Unknown operator: ", Unknown])}).        
  
  
-assign_ast('=', Ast1, Ast2) ->
+assign_ast('=', Name, _, Ast2, #js_ctx{global = true} = Ctx, Acc) ->
     %% TODO: dynamic typechecking
-    erl_syntax:match_expr(Ast1, Ast2);      
-assign_ast(Unknown, _, _) ->    
+    Ast = erl_syntax:application(none, erl_syntax:atom(put), [
+        erl_syntax:atom(prefix_name(Name)), Ast2]),
+    {{[], #ast_inf{global_asts = [Ast]}}, {Ctx, Acc}};  
+assign_ast('=', _, Ast1, Ast2, Ctx, Acc) ->
+    %% TODO: dynamic typechecking  
+    Ast = erl_syntax:match_expr(Ast1, Ast2),
+    {{Ast, #ast_inf{}}, {Ctx, Acc}}; 
+assign_ast(Unknown, _, _, _, _, _) ->
     throw({error, lists:concat(["Unknown assignment operator: ", Unknown])}).        
- 
+
 
 maybe_global({{Ast, Inf}, {#js_ctx{global = true} = Ctx, Acc}}) ->
     {{[], Inf#ast_inf{global_asts = [Ast]}}, {Ctx, Acc}};
@@ -563,7 +563,7 @@ assign_to_op(Assign) ->
     list_to_atom(tl(lists:reverse(string:strip(atom_to_list(Assign), both, $')))).
     
 
-erl_name(Name) ->
+prefix_name(Name) ->
     lists:concat(["js_", Name]).
             
 push_new_scope(Acc) ->

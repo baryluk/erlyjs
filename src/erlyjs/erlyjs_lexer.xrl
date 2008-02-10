@@ -142,7 +142,7 @@ build_integer(Chars, Line) ->
 build_float(Chars, Line) ->
     {token, {float, Line,list_to_float(Chars)}}.
 
-build_string(Chars, Len, Line) ->
+build_string(Chars, Line, Len) ->
     S = lists:sublist(Chars, 2, Len - 2), 
     {token, {string, Line, S}}.
   

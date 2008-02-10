@@ -1,6 +1,6 @@
 // Mandatory. Return here a description of the test case.
 function test_description() {
-    return "Simple local variable test";
+    return "Global variable declaration";
 }
 
 // Mandatory. Return here an array of arguments the testsuite will use 
@@ -15,13 +15,12 @@ function test_assert() {
 }
 
 // Optional. Provide here any global code.
-
+var a;
 
 // Mandatory. The actual test. 
 // Testsuite invokes this function with the arguments from test_args()
 // and compares the return value with the expected result from test_assert().
 function test() {
-    var a;
     a = 5;
     return a;
 }
