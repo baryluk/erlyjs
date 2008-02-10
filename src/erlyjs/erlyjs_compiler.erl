@@ -285,24 +285,46 @@ ast({'if', Cond, If}, {Ctx, Acc}) ->
     Out = erl_syntax:match_expr(erl_syntax:tuple(Vars), Stmt),
     {{Out, #ast_inf{}}, {Ctx, Acc2#tree_acc{var_pairs = tl(Acc2#tree_acc.var_pairs)}}};
 ast({'if', Cond, If, Else}, {Ctx, Acc}) -> 
-    %%  TODO: does not work yet
-    {OutCond, _, #tree_acc{names_set = Set1}} = body_ast(Cond, Ctx, Acc),
-    {OutIf, Inf, Acc1} = body_ast(If, Ctx, Acc#tree_acc{names_set = Set1, var_pairs = [[] | Acc#tree_acc.var_pairs]}),
-    {OutElse, Inf2, Acc2} = body_ast(Else, Ctx, Acc1),
-    VarPairs = lists:usort(hd(Acc2#tree_acc.var_pairs)),
-    ReturnVars = erl_syntax:tuple([erl_syntax:variable(E) || {_J, E} <- VarPairs]),
-    {Vars, Acc5} = lists:mapfoldl(
+    {OutCond, _, #tree_acc{names_set = Set}} = body_ast(Cond, Ctx, Acc),
+    {OutIf, _, #tree_acc{names_set = Set1} = Acc1} = body_ast(If, Ctx, Acc#tree_acc{names_set = Set, var_pairs = [dict:new() | Acc#tree_acc.var_pairs]}),   
+    {OutElse, _, Acc2} = body_ast(Else, Ctx, Acc#tree_acc{names_set = Set1, var_pairs = [dict:new() | Acc#tree_acc.var_pairs]}),
+    KeyList = lists:usort([ Key || {Key, _} <- lists:append([
+        dict:to_list(hd(Acc1#tree_acc.var_pairs)), 
+        dict:to_list(hd(Acc2#tree_acc.var_pairs))])]),
+    ReturnVarsIf = erl_syntax:tuple(lists:map(
         fun
-            ({X, _}, Acc3) ->
+            (Key) ->
+                case  dict:find(Key, hd(Acc1#tree_acc.var_pairs)) of
+                    {ok, Val} ->
+                       erl_syntax:variable(Val);
+                    error ->
+                       {{Ast, _}, {_, _}} = var_name(Key, Ctx, Acc),
+                       Ast
+                end
+        end, KeyList)),           
+    ReturnVarsElse = erl_syntax:tuple(lists:map(
+        fun
+            (Key) ->
+                case  dict:find(Key, hd(Acc2#tree_acc.var_pairs)) of
+                    {ok, Val} ->
+                       erl_syntax:variable(Val);
+                    error ->
+                       {{Ast, _}, {_, _}} = var_name(Key, Ctx, Acc),
+                       Ast
+                end
+        end, KeyList)),        
+    {Vars, Acc3} = lists:mapfoldl(
+        fun
+            (Key, AccIn) ->
                 
-                {{Ast, _}, {_, Acc4}} = var_name(X, Ctx#js_ctx{action = set}, Acc3),
-                {Ast, Acc4}
-        end,  Acc2, VarPairs),    
+                {{Ast, _}, {_, AccOut}} = var_name(Key, Ctx#js_ctx{action = set}, AccIn),
+                {Ast, AccOut}
+        end,  Acc2, KeyList),         
     Stmt = erl_syntax:case_expr(OutCond, [
-        erl_syntax:clause([erl_syntax:atom(true)], none, merge_asts(OutIf, ReturnVars)),
-        erl_syntax:clause([erl_syntax:underscore()], none, merge_asts(OutElse, ReturnVars))]),
+        erl_syntax:clause([erl_syntax:atom(true)], none, merge_asts(OutIf, ReturnVarsIf)),
+        erl_syntax:clause([erl_syntax:underscore()], none, merge_asts(OutElse, ReturnVarsElse))]),
     Out = erl_syntax:match_expr(erl_syntax:tuple(Vars), Stmt),
-    {{Out, Inf}, {Ctx, Acc5#tree_acc{var_pairs = tl(Acc5#tree_acc.var_pairs)}}};   
+    {{Out, #ast_inf{}}, {Ctx, Acc3#tree_acc{var_pairs = tl(Acc3#tree_acc.var_pairs)}}};   
 ast(Unknown, _) ->
     throw({error, lists:concat(["Unknown token: ", Unknown])}). 
     
