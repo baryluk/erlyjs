@@ -349,9 +349,12 @@ var_name(JsName, #js_ctx{action = set} = Ctx, Acc) ->
         js_scopes = [#scope{names_dict = Dict} | tl(Acc#tree_acc.js_scopes)],
         var_pairs = VarPairs},
     {{erl_syntax:variable(ErlName), #ast_inf{}}, {Ctx, Acc1}}; 
+    
+var_name(undefined, #js_ctx{action = get} = Ctx, Acc) ->
+    {{erl_syntax:atom(undefined), #ast_inf{}}, {Ctx, Acc}};
 var_name(JsName, #js_ctx{action = get} = Ctx, Acc) ->
     case name_search(JsName, Acc#tree_acc.js_scopes, []) of
-        undefined ->
+        not_found ->
             throw({error, lists:concat(["ReferenceError: ", JsName, " is not defined"])});
         {global, Name} ->
             Args = [erl_syntax:atom(Name)], 
@@ -363,7 +366,7 @@ var_name(JsName, #js_ctx{action = get} = Ctx, Acc) ->
 
 var_declare(JsName, [], Ctx, #tree_acc{js_scopes = [GlobalScope]}=Acc) ->      
     Dict = dict:store(JsName, prefix_name(JsName), GlobalScope#scope.names_dict),
-    Args = [erl_syntax:atom(prefix_name(JsName)), erl_syntax:atom(declared)], 
+    Args = [erl_syntax:atom(prefix_name(JsName)), erl_syntax:atom(undefined)], 
     Ast = erl_syntax:application(none, erl_syntax:atom(put), Args),
     Acc1 = Acc#tree_acc{js_scopes=[#scope{names_dict = Dict}]}, 
     {{[], #ast_inf{global_asts = [Ast]}}, {Ctx, Acc1}}; 
@@ -377,7 +380,7 @@ var_declare(JsName, Value, Ctx,  #tree_acc{js_scopes = [GlobalScope]}=Acc) ->
     {{[], Info1#ast_inf{global_asts = Asts}}, {Ctx, Acc2}};  
 var_declare(Name, [], Ctx, Acc) ->
     {{AstVariable, _}, {_, Acc1}}  = var_name(Name, Ctx, Acc),
-    Ast = erl_syntax:match_expr(AstVariable, erl_syntax:atom(declared)),  
+    Ast = erl_syntax:match_expr(AstVariable, erl_syntax:atom(undefined)),  
     {{Ast, #ast_inf{}}, {Ctx, Acc1}};  
 var_declare(Name, Value, Ctx, Acc) ->
     {{AstVariable, _}, {_, Acc1}}  = var_name(Name, Ctx, Acc),
@@ -387,7 +390,7 @@ var_declare(Name, Value, Ctx, Acc) ->
     
   
 name_search(_, [], _) ->
-    undefined;
+    not_found;
 name_search(Name, [H | T], Acc) ->
     case dict:find(Name, H#scope.names_dict) of
         {ok, Value} ->

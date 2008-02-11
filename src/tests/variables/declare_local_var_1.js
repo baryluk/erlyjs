@@ -11,7 +11,7 @@ function test_args() {
 
 // Mandatory. Return here the expected test result. 
 function test_ok() {
-    return 5;
+    return undefined;
 }
 
 // Optional. Provide here any global code.
@@ -22,6 +22,5 @@ function test_ok() {
 // and compares the return value with the expected result from test_ok().
 function test() {
     var a;
-    a = 5;
     return a;
 }

@@ -11,7 +11,7 @@ function test_args() {
 
 // Mandatory. Return here the expected test result. 
 function test_ok() {
-    return 5;
+    return undefined;
 }
 
 // Optional. Provide here any global code.
@@ -21,6 +21,5 @@ var a;
 // Testsuite invokes this function with the arguments from test_args()
 // and compares the return value with the expected result from test_ok().
 function test() {
-    a = 5;
     return a;
 }
