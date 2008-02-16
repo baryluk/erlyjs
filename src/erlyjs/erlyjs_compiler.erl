@@ -136,7 +136,7 @@ forms(Checksum, Module, FuncAsts, Info) ->
             [erl_syntax:tuple([erl_syntax:atom("error"),
                 erl_syntax:atom("no_global_code")])];
         List -> 
-            lists:reverse([erl_syntax:atom(ok) | lists:reverse(List)]) 
+            lists:reverse([erl_syntax:atom(ok) | List]) 
     end,
     InitFuncAst = erl_syntax:function(erl_syntax:atom("jsinit"),
         [erl_syntax:clause([], none, InitFuncAstBody)]),    
@@ -209,7 +209,7 @@ body_ast(JsParseTree, Ctx, Acc) when is_list(JsParseTree) ->
     {AstList, Inf} = lists:mapfoldl(
         fun
             ({XAst, XInf}, InfAcc) ->
-                {XAst, merge_info(XInf, InfAcc)}
+                {XAst, append_info(XInf, InfAcc)}
         end, #ast_inf{}, AstInfList),
     {lists:flatten(AstList), Inf, Acc1};
 body_ast(JsParseTree, Ctx, Acc) ->
@@ -288,7 +288,7 @@ ast({'if', Cond, If}, {Ctx, Acc}) ->
                 {Ast, AccOut}
         end,  Acc1, dict:to_list(hd(Acc1#tree_acc.var_pairs))),    
     Ast = erl_syntax:case_expr(OutCond, [
-        erl_syntax:clause([erl_syntax:atom(true)], none, merge_asts(OutIf, ReturnVarsIf)),
+        erl_syntax:clause([erl_syntax:atom(true)], none, append_asts(OutIf, ReturnVarsIf)),
         erl_syntax:clause([erl_syntax:underscore()], none, [ReturnVarsElse])]),
     Ast2 = erl_syntax:match_expr(erl_syntax:tuple(Vars), Ast),
     {{Ast2, #ast_inf{}}, {Ctx, Acc2#tree_acc{var_pairs = tl(Acc2#tree_acc.var_pairs)}}};
@@ -332,8 +332,8 @@ ast({'if', Cond, If, Else}, {Ctx, Acc}) ->
                 {Ast, AccOut}
         end,  Acc2, KeyList),         
     Ast = erl_syntax:case_expr(OutCond, [
-        erl_syntax:clause([erl_syntax:atom(true)], none, merge_asts(OutIf, ReturnVarsIf)),
-        erl_syntax:clause([erl_syntax:underscore()], none, merge_asts(OutElse, ReturnVarsElse))]),
+        erl_syntax:clause([erl_syntax:atom(true)], none, append_asts(OutIf, ReturnVarsIf)),
+        erl_syntax:clause([erl_syntax:underscore()], none, append_asts(OutElse, ReturnVarsElse))]),
     Ast2 = erl_syntax:match_expr(erl_syntax:tuple(Vars), Ast),
     {{Ast2, #ast_inf{}}, {Ctx, Acc3#tree_acc{var_pairs = tl(Acc3#tree_acc.var_pairs)}}};   
 ast({do_while, Stmt, Cond}, {Ctx, Acc}) ->
@@ -365,14 +365,14 @@ ast({do_while, Stmt, Cond}, {Ctx, Acc}) ->
             end,  Acc3#tree_acc{names_set = Acc4#tree_acc.names_set}, dict:to_list(hd(Acc3#tree_acc.var_pairs))),  
     VarsAfter = erl_syntax:tuple(VarsAfter0),
     
-    AstFuncBody = [OutStmt, erl_syntax:case_expr(OutCond, [
+    AstFuncCond = erl_syntax:case_expr(OutCond, [
         erl_syntax:clause([erl_syntax:atom(true)], none,
             [erl_syntax:application(none, func_name(Acc2), [VarsAfterStmt])]),
         erl_syntax:clause([erl_syntax:underscore()], none,  
-            [VarsAfterStmt])])],
+            [VarsAfterStmt])]),
  
     Func = erl_syntax:function(func_name(Acc2),
-        [erl_syntax:clause([VarsBefore], none, AstFuncBody)]),
+        [erl_syntax:clause([VarsBefore], none, append_asts(OutStmt, AstFuncCond))]),
     
     Ast = erl_syntax:match_expr(VarsAfter, 
         erl_syntax:application(none, func_name(Acc2), [VarsBefore])),  
@@ -610,21 +610,21 @@ maybe_global({AstInf, CtxAcc}) ->
     {AstInf, CtxAcc}.
     
     
-merge_asts(Ast1, Ast2) when is_list(Ast1), is_list(Ast2) ->
-    lists:merge(Ast1, Ast2);
-merge_asts(Ast1, Ast2) when is_list(Ast1) ->
-    lists:merge(Ast1, [Ast2]);
-merge_asts(Ast1, Ast2) when is_list(Ast2) ->
-    lists:merge([Ast1], Ast2);
-merge_asts(Ast1, Ast2) ->
+append_asts(Ast1, Ast2) when is_list(Ast1), is_list(Ast2) ->
+    lists:append(Ast1, Ast2);
+append_asts(Ast1, Ast2) when is_list(Ast1) ->
+    lists:append(Ast1, [Ast2]);
+append_asts(Ast1, Ast2) when is_list(Ast2) ->
+    lists:append([Ast1], Ast2);
+append_asts(Ast1, Ast2) ->
     [Ast1, Ast2].
     
                            
-merge_info(Info1, Info2) ->
+append_info(Info1, Info2) ->
     #ast_inf{
-        export_asts = lists:merge(Info1#ast_inf.export_asts, Info2#ast_inf.export_asts),
-        global_asts = lists:merge(Info1#ast_inf.global_asts, Info2#ast_inf.global_asts),
-        internal_func_asts = lists:merge(Info1#ast_inf.internal_func_asts, Info2#ast_inf.internal_func_asts)}. 
+        export_asts = lists:append(Info1#ast_inf.export_asts, Info2#ast_inf.export_asts),
+        global_asts = lists:append(Info1#ast_inf.global_asts, Info2#ast_inf.global_asts),
+        internal_func_asts = lists:append(Info1#ast_inf.internal_func_asts, Info2#ast_inf.internal_func_asts)}. 
 
 
 assign_to_op(Assign) ->
