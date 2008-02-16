@@ -270,27 +270,13 @@ ast({'if', Cond, If}, {Ctx, Acc}) ->
     %% TODO: handle global scope
     {OutCond, _, #tree_acc{names_set = Set1}} = body_ast(Cond, Ctx, Acc),
     {OutIf, _, Acc1} = body_ast(If, Ctx, Acc#tree_acc{names_set = Set1, var_pairs = [dict:new() | Acc#tree_acc.var_pairs]}),
-    ReturnVarsIf = erl_syntax:tuple(dict:fold(
-        fun
-            (_, Val, AccIn) -> 
-                [erl_syntax:variable(Val) | AccIn]
-        end, [], hd(Acc1#tree_acc.var_pairs))),          
-    ReturnVarsElse = erl_syntax:tuple(dict:fold(
-        fun
-            (Key, _, AccIn) -> 
-                {{Ast, _}, {_, _}} = var_ast(Key, Ctx, Acc),
-                [Ast| AccIn]
-        end, [], hd(Acc1#tree_acc.var_pairs))),                                     
-    {Vars, Acc2} = lists:mapfoldl(
-        fun
-            ({Key, _}, AccIn) ->
-                {{Ast, _}, {_, AccOut}} = var_ast(Key, Ctx#js_ctx{action = set}, AccIn),
-                {Ast, AccOut}
-        end,  Acc1, dict:to_list(hd(Acc1#tree_acc.var_pairs))),    
+    ReturnVarsIf = get_vars_snapshot(Acc1),    
+    ReturnVarsElse = get_vars_init(Acc, Acc1, Ctx),
+    {Vars, Acc2} =  get_vars_result(Acc1, Acc1, Ctx),                                         
     Ast = erl_syntax:case_expr(OutCond, [
         erl_syntax:clause([erl_syntax:atom(true)], none, append_asts(OutIf, ReturnVarsIf)),
         erl_syntax:clause([erl_syntax:underscore()], none, [ReturnVarsElse])]),
-    Ast2 = erl_syntax:match_expr(erl_syntax:tuple(Vars), Ast),
+    Ast2 = erl_syntax:match_expr(Vars, Ast),
     {{Ast2, #ast_inf{}}, {Ctx, Acc2#tree_acc{var_pairs = tl(Acc2#tree_acc.var_pairs)}}};
 ast({'if', Cond, If, Else}, {Ctx, Acc}) -> 
     %% TODO: handle global scope
@@ -302,6 +288,7 @@ ast({'if', Cond, If, Else}, {Ctx, Acc}) ->
     KeyList = lists:usort([ Key || {Key, _} <- lists:append([
         dict:to_list(hd(Acc1#tree_acc.var_pairs)), 
         dict:to_list(hd(Acc2#tree_acc.var_pairs))])]),
+    %% ReturnVarsIf = get_vars(Acc, Acc1, Ctx),
     ReturnVarsIf = erl_syntax:tuple(lists:map(
         fun
             (Key) ->
@@ -312,7 +299,8 @@ ast({'if', Cond, If, Else}, {Ctx, Acc}) ->
                        {{Ast, _}, {_, _}} = var_ast(Key, Ctx, Acc),
                        Ast
                 end
-        end, KeyList)),           
+        end, KeyList)), 
+    %% ReturnVarsElse = get_vars(Acc, Acc2, Ctx),         
     ReturnVarsElse = erl_syntax:tuple(lists:map(
         fun
             (Key) ->
@@ -323,7 +311,8 @@ ast({'if', Cond, If, Else}, {Ctx, Acc}) ->
                        {{Ast, _}, {_, _}} = var_ast(Key, Ctx, Acc),
                        Ast
                 end
-        end, KeyList)),        
+        end, KeyList)),    
+    %% {Vars, Acc3} = get_vars_result(Acc2, Acc2, Ctx),    
     {Vars, Acc3} = lists:mapfoldl(
         fun
             (Key, AccIn) ->
@@ -343,40 +332,18 @@ ast({do_while, Stmt, Cond}, {Ctx, Acc}) ->
         func_counter = Acc#tree_acc.func_counter + 1},   
     {OutStmt, _, Acc3} = body_ast(Stmt, Ctx, Acc2),   
     {OutCond, _, Acc4} = body_ast(Cond, Ctx, Acc3),
-    
-    VarsBefore = erl_syntax:tuple(dict:fold(
-        fun
-            (Key, _, AccIn) -> 
-                {{Ast, _}, {_, _}} = var_ast(Key, Ctx, Acc),
-                [Ast| AccIn]
-        end, [], hd(Acc3#tree_acc.var_pairs))),
-    
-    VarsAfterStmt = erl_syntax:tuple(dict:fold(
-        fun
-            (_, Val, AccIn) -> 
-                [erl_syntax:variable(Val) | AccIn]
-        end, [], hd(Acc3#tree_acc.var_pairs))),
-    
-    {VarsAfter0, Acc5} = lists:mapfoldl(
-        fun
-            ({Key, _}, AccIn) ->
-                {{Ast, _}, {_, AccOut}} = var_ast(Key, Ctx#js_ctx{action = set}, AccIn),
-                {Ast, AccOut}
-            end,  Acc3#tree_acc{names_set = Acc4#tree_acc.names_set}, dict:to_list(hd(Acc3#tree_acc.var_pairs))),  
-    VarsAfter = erl_syntax:tuple(VarsAfter0),
-    
+    VarsBefore = get_vars_init(Acc, Acc3, Ctx),
+    VarsAfterStmt = get_vars_snapshot(Acc3),
+    {VarsAfter, Acc5} = get_vars_result(Acc3, Acc4, Ctx),    
     AstFuncCond = erl_syntax:case_expr(OutCond, [
         erl_syntax:clause([erl_syntax:atom(true)], none,
             [erl_syntax:application(none, func_name(Acc2), [VarsAfterStmt])]),
         erl_syntax:clause([erl_syntax:underscore()], none,  
             [VarsAfterStmt])]),
- 
     Func = erl_syntax:function(func_name(Acc2),
         [erl_syntax:clause([VarsBefore], none, append_asts(OutStmt, AstFuncCond))]),
-    
     Ast = erl_syntax:match_expr(VarsAfter, 
         erl_syntax:application(none, func_name(Acc2), [VarsBefore])),  
-        
     {{[Ast], #ast_inf{internal_func_asts = [Func]}}, {Ctx, Acc5#tree_acc{var_pairs = tl(Acc5#tree_acc.var_pairs)}}};   
 ast({while, Cond, Stmt}, {Ctx, Acc}) ->
     %% TODO: everything
@@ -392,11 +359,13 @@ empty_ast(Ctx, Acc) ->
 func_name(Acc) ->
     erl_syntax:atom(lists:concat(["func_", Acc#tree_acc.func_counter])).
     
- 
-fun_var_ast(Acc) ->
-    ErlName = erl_syntax_lib:new_variable_name(Acc#tree_acc.names_set),
-    Acc2 = Acc#tree_acc{names_set = sets:add_element(ErlName, Acc#tree_acc.names_set)},
-    {erl_syntax:variable(ErlName), Acc2}.
+    
+%%  TODO:
+%% 
+%% fun_var_ast(Acc) ->
+%%     ErlName = erl_syntax_lib:new_variable_name(Acc#tree_acc.names_set),
+%%     Acc2 = Acc#tree_acc{names_set = sets:add_element(ErlName, Acc#tree_acc.names_set)},
+%%     {erl_syntax:variable(ErlName), Acc2}.
     
       
 var_ast(JsName, #js_ctx{action = set} = Ctx, Acc) ->
@@ -465,8 +434,55 @@ name_search(Name, [H | T], Acc) ->
             end;
         error -> name_search(Name, T, [H | Acc]) 
     end.
-             
+
+
+get_vars_init(Acc1, Acc2, Ctx) ->
+    erl_syntax:tuple(dict:fold(
+        fun
+            (Key, _, AccIn) -> 
+                {{Ast, _}, {_, _}} = var_ast(Key, Ctx, Acc1),
+                [Ast| AccIn]
+        end, [], hd(Acc2#tree_acc.var_pairs))).
             
+
+get_vars_snapshot(Acc) ->                    
+    erl_syntax:tuple(dict:fold(
+        fun
+            (_, Val, AccIn) -> 
+                [erl_syntax:variable(Val) | AccIn]
+        end, [], hd(Acc#tree_acc.var_pairs))).
+        
+
+%% TODO: 
+%%         
+%% get_vars(AccInit, AccSnapshot, Ctx) -> 
+%%     KeyList = lists:usort([ Key || {Key, _} <- lists:append([
+%%         dict:to_list(hd(AccInit#tree_acc.var_pairs)), 
+%%         dict:to_list(hd(AccSnapshot#tree_acc.var_pairs))])]),       
+%%     erl_syntax:tuple(lists:map(
+%%         fun
+%%             (Key) ->
+%%                 case  dict:find(Key, hd(AccSnapshot#tree_acc.var_pairs)) of
+%%                     {ok, Val} ->
+%%                        erl_syntax:variable(Val);
+%%                     error ->
+%%                        {{Ast, _}, {_, _}} = var_ast(Key, Ctx, AccInit),
+%%                        Ast
+%%                 end
+%%         end, KeyList)).
+
+
+get_vars_result(Acc, AccSet, Ctx) ->
+    AccInit = Acc#tree_acc{names_set = AccSet#tree_acc.names_set},        
+    {VarsAfter, Acc2} = lists:mapfoldl(
+        fun
+            ({Key, _}, AccIn) ->
+                {{Ast, _}, {_, AccOut}} = var_ast(Key, Ctx#js_ctx{action = set}, AccIn),
+                {Ast, AccOut}
+            end,  AccInit, dict:to_list(hd(Acc#tree_acc.var_pairs))),  
+    {erl_syntax:tuple(VarsAfter), Acc2}.
+            
+                       
 func(Name, Params, Body, Ctx, Acc) -> 
     {Params1, _, _} = body_ast(Params, Ctx, Acc),          
     {Ast, Inf, _} = body_ast(Body, Ctx#js_ctx{global = false}, push_new_scope(Acc)),
