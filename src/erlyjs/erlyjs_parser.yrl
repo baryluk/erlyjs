@@ -348,11 +348,11 @@ SwitchStatement -> switch ParenthesizedExpression '{' '}' : '$1'.
 %% CaseGuard -> case Expression ':' : '$1'.
 %% CaseGuard -> default ':' : '$1'.
      
-%% Do-While Statement  TODO
-DoStatement -> do Statement while ParenthesizedExpression : '$1'.
+%% Do-While Statement
+DoStatement -> do Statement while ParenthesizedExpression : {do_while, '$2', '$4'}.
 
 %% While Statement
-WhileStatement -> while ParenthesizedExpression Statement : '$1'.
+WhileStatement -> while ParenthesizedExpression Statement : {while, '$2', '$3'}.
 
 %% For Statements  TODO
 ForStatement -> for '(' ForInitializer ';' OptionalExpression ';' OptionalExpression ')' Statement : '$1'.
