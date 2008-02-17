@@ -275,11 +275,11 @@ ast({'if', Cond, If}, {#js_ctx{global = true} = Ctx, Acc}) ->
     Ast = erl_syntax:case_expr(OutCond, [
         erl_syntax:clause([erl_syntax:atom(true)], none, Inf#ast_inf.global_asts),
         erl_syntax:clause([erl_syntax:underscore()], none, [ReturnVarsElse])]),
-    {{[], Inf#ast_inf{global_asts = [Ast]}}, {Ctx, pop_var_pairs(Acc3)}};    
+    {{[], #ast_inf{global_asts = [Ast]}}, {Ctx, pop_var_pairs(Acc3)}};    
 ast({'if', Cond, If}, {Ctx, Acc}) -> 
     {OutCond, _, #tree_acc{names_set = Set}} = body_ast(Cond, Ctx, Acc),
     Acc2 = Acc#tree_acc{names_set = Set, var_pairs = push_var_pairs(Acc)},
-    {OutIf, Inf, Acc3} = body_ast(If, Ctx, Acc2),
+    {OutIf, _, Acc3} = body_ast(If, Ctx, Acc2),
     ReturnVarsIf = get_vars_snapshot(Acc3),    
     ReturnVarsElse = get_vars_init(Acc, Acc3, Ctx),
     {Vars, Acc4} =  get_vars_result(Acc3, Acc3, Ctx),                                         
@@ -287,9 +287,9 @@ ast({'if', Cond, If}, {Ctx, Acc}) ->
         erl_syntax:clause([erl_syntax:atom(true)], none, append_asts(OutIf, ReturnVarsIf)),
         erl_syntax:clause([erl_syntax:underscore()], none, [ReturnVarsElse])]),
     Ast2 = erl_syntax:match_expr(Vars, Ast),
-    {{Ast2, Inf}, {Ctx, pop_var_pairs(Acc4)}};
+    {{Ast2, #ast_inf{}}, {Ctx, pop_var_pairs(Acc4)}};
 ast({'if', Cond, If, Else}, {Ctx, Acc}) -> 
-    %% TODO: handle global scope
+    %% TODO: refacor and handle global scope
     {OutCond, _, #tree_acc{names_set = Set}} = body_ast(Cond, Ctx, Acc),
     AccOutIfIn = Acc#tree_acc{names_set = Set, var_pairs = push_var_pairs(Acc)},
     {OutIf, _, #tree_acc{names_set = Set1} = Acc1} = body_ast(If, Ctx, AccOutIfIn), 
@@ -369,9 +369,24 @@ ast({do_while, Stmt, Cond}, {Ctx, Acc}) ->
         [erl_syntax:clause([VarsBefore], none, append_asts(OutStmt, AstFuncCond))]),
     Ast = erl_syntax:match_expr(VarsAfter, 
         erl_syntax:application(none, func_name(Acc2), [VarsBefore])),  
-    {{[Ast], #ast_inf{internal_func_asts = [Func]}}, {Ctx, pop_var_pairs(Acc5)}};   
+    {{[Ast], #ast_inf{internal_func_asts = [Func]}}, {Ctx, pop_var_pairs(Acc5)}};       
+ast({while, Cond, Stmt}, {#js_ctx{global = true} = Ctx, Acc}) ->
+    {OutCond, _, #tree_acc{names_set = Set}} = body_ast(Cond, Ctx, Acc),
+    Acc2 = Acc#tree_acc{
+        names_set = Set, 
+        var_pairs = push_var_pairs(Acc),
+        func_counter = inc_func_counter(Acc)},
+    {_, Inf, Acc3} = body_ast(Stmt, Ctx, Acc2),
+    AstFuncCond = erl_syntax:case_expr(OutCond, [
+        erl_syntax:clause([erl_syntax:atom(true)], none,
+            append_asts(Inf#ast_inf.global_asts, erl_syntax:application(none, func_name(Acc3), []))),
+        erl_syntax:clause([erl_syntax:underscore()], none,  
+            [get_global_vars(Acc3)])]),    
+    Func = erl_syntax:function(func_name(Acc3),
+        [erl_syntax:clause([], none, [AstFuncCond])]),
+    Ast = erl_syntax:application(none, func_name(Acc3), []),        
+    {{[], #ast_inf{internal_func_asts = [Func], global_asts = [Ast]}}, {Ctx, pop_var_pairs(Acc3)}};      
 ast({while, Cond, Stmt}, {Ctx, Acc}) ->
-    %% TODO: handle global scope 
     {OutCond, _, #tree_acc{names_set = Set}} = body_ast(Cond, Ctx, Acc),
     Acc2 = Acc#tree_acc{
         names_set = Set, 
@@ -380,17 +395,14 @@ ast({while, Cond, Stmt}, {Ctx, Acc}) ->
     {OutStmt, _, Acc3} = body_ast(Stmt, Ctx, Acc2),
     VarsBefore = get_vars_init(Acc, Acc3, Ctx),
     VarsAfterStmt = get_vars_snapshot(Acc3),
-    {VarsAfter, Acc4} = get_vars_result(Acc3, Acc3, Ctx),
-    
+    {VarsAfter, Acc4} = get_vars_result(Acc3, Acc3, Ctx),    
     AstFuncCond = erl_syntax:case_expr(OutCond, [
         erl_syntax:clause([erl_syntax:atom(true)], none,
             append_asts(OutStmt, erl_syntax:application(none, func_name(Acc2), [VarsAfterStmt]))),
         erl_syntax:clause([erl_syntax:underscore()], none,  
-            [VarsBefore])]),
-            
+            [VarsBefore])]),          
     Func = erl_syntax:function(func_name(Acc2),
         [erl_syntax:clause([VarsBefore], none, [AstFuncCond])]),
-    
     Ast = erl_syntax:match_expr(VarsAfter, 
         erl_syntax:application(none, func_name(Acc3), [VarsBefore])),           
     {{[Ast], #ast_inf{internal_func_asts = [Func]}}, {Ctx, pop_var_pairs(Acc4)}}; 
