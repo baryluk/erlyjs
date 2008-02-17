@@ -127,8 +127,9 @@ fold_tests(RegExp, Verbose) ->
         end, {0, []}).    
 
     
-test(File, Verbose) ->   
+test(File, Verbose) -> 
 	Module = filename:rootname(filename:basename(File)),
+	io:format("Compiling: ~p ... ",[Module]),  
 	Options = [{force_recompile, true}, {verbose, Verbose}],
 	case erlyjs_compiler:compile(File, Module, Options) of
 	    ok ->
@@ -138,16 +139,20 @@ test(File, Verbose) ->
 	        Args = M:js_test_args(),
 	        M:jsinit(),
 	        Result = case catch apply(M, js_test, Args) of
-	            Expected -> 
+	            Expected ->
+	                io:format("ok ~n"),   
 	                ok;
 	            Val when is_number(Val) ->
 	                case Expected == Val of
         	            true ->
+        	                io:format("ok ~n"),  
         	                ok;
         	            _ ->
+        	                io:format("~n"),
         	                {error, "test failed: " ++ Module ++ " Result: " ++ Val}
         	        end;
 	            Other ->
+	                io:format("~n"),
 	                {error, "test failed: " ++ Module ++ " Result: " ++ Other}
 	        end,
 	        M:jsreset(),

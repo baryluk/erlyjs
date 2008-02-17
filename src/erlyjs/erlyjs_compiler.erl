@@ -179,9 +179,9 @@ forms(Checksum, Module, FuncAsts, Info) ->
 compile_forms(Forms, Ctx) ->  
     CompileOptions = case Ctx#js_ctx.verbose of
         true ->
-            io:format("Erlang source:~n~n"),
-            io:put_chars(erl_prettypr:format(erl_syntax:form_list(Forms))),
-            io:format("~n"),
+            %% io:format("Erlang source:~n~n"),
+            %% io:put_chars(erl_prettypr:format(erl_syntax:form_list(Forms))),
+            %% io:format("~n"),
             [verbose, report_errors, report_warnings];
         _ ->
             []
@@ -244,33 +244,33 @@ ast({return, Expression}, {Ctx, Acc}) ->
 ast({function, {identifier, _L2, Name}, {params, Params, body, Body}}, {Ctx, Acc}) ->
     func(Name, Params, Body, Ctx, Acc);      
 ast({{{identifier, _L, Name}, MemberList}, {'(', Args}}, {Ctx, Acc}) ->
+    %% TODO: needs complete rewrite
     maybe_global(call(Name, MemberList, Args, Ctx, Acc));  
 ast({op, {Op, _}, In}, {Ctx, Acc}) ->
     {Out, _, #tree_acc{names_set = Set}} = body_ast(In, Ctx, Acc),
-    maybe_global({{op_ast(Op, Out), #ast_inf{}}, {Ctx, Acc#tree_acc{names_set = Set}}});
+    {{op_ast(Op, Out), #ast_inf{}}, {Ctx, Acc#tree_acc{names_set = Set}}};
 ast({op, {Op, _}, In1, In2}, {Ctx, Acc}) ->
     {Out1, _, #tree_acc{names_set = Set1}} = body_ast(In1, Ctx, Acc),
     {Out2, _, #tree_acc{names_set = Set2}} = body_ast(In2, Ctx, Acc#tree_acc{names_set = Set1}),
-    maybe_global({{op_ast(Op, Out1, Out2), #ast_inf{}}, {Ctx, Acc#tree_acc{names_set = Set2}}});
+    {{op_ast(Op, Out1, Out2), #ast_inf{}}, {Ctx, Acc#tree_acc{names_set = Set2}}};
 ast({op, Op, In1, In2, In3}, {Ctx, Acc}) ->
     {Out1, _, #tree_acc{names_set = Set1}} = body_ast(In1, Ctx, Acc),
     {Out2, _, #tree_acc{names_set = Set2}} = body_ast(In2, Ctx, Acc#tree_acc{names_set = Set1}),
     {Out3, _, #tree_acc{names_set = Set3}} = body_ast(In3, Ctx, Acc#tree_acc{names_set = Set2}),
-    maybe_global({{op_ast(Op, Out1, Out2, Out3), #ast_inf{}}, {Ctx, Acc#tree_acc{names_set = Set3}}}); 
+    {{op_ast(Op, Out1, Out2, Out3), #ast_inf{}}, {Ctx, Acc#tree_acc{names_set = Set3}}}; 
 ast({assign, {'=', _}, {identifier, _, Name}, In1}, {Ctx, Acc}) ->  
-    {{Out1, _}, {_, Acc1}} = var_ast(Name, Ctx#js_ctx{action = set}, Acc),  
-    {Out2, _, _} = body_ast(In1, Ctx, Acc),  
-    assign_ast('=', Name, Out1, Out2, Ctx, Acc1);
+    {{Out2, _}, {_, Acc1}} = var_ast(Name, Ctx#js_ctx{action = set}, Acc),  
+    {Out3, Inf, _} = body_ast(In1, Ctx, Acc),  
+    assign_ast('=', Name, Out2, Out3, Inf, Ctx, Acc1);
 ast({assign, {Op, _}, {identifier, _, Name}, In1}, {Ctx, Acc}) ->  
-    {{Out1, _}, _} = var_ast(Name, Ctx, Acc),  
-    {Out2, _, Acc1} = body_ast(In1, Ctx, Acc),    
-    {{Out3, _}, {_, Acc2}} = var_ast(Name, Ctx#js_ctx{action = set}, Acc1), 
-    assign_ast('=', Name, Out3, op_ast(assign_to_op(Op), Out1, Out2), Ctx, Acc2);
+    {{Out2, _}, _} = var_ast(Name, Ctx, Acc),  
+    {Out3, Inf, Acc1} = body_ast(In1, Ctx, Acc),    
+    {{Out4, _}, {_, Acc2}} = var_ast(Name, Ctx#js_ctx{action = set}, Acc1), 
+    assign_ast('=', Name, Out4, op_ast(assign_to_op(Op), Out2, Out3), Inf, Ctx, Acc2);
 ast({'if', Cond, If}, {Ctx, Acc}) -> 
-    %% TODO: handle global scope
     {OutCond, _, #tree_acc{names_set = Set}} = body_ast(Cond, Ctx, Acc),
     Acc2 = Acc#tree_acc{names_set = Set, var_pairs = [dict:new() | Acc#tree_acc.var_pairs]},
-    {OutIf, _, Acc3} = body_ast(If, Ctx, Acc2),
+    {OutIf, Inf, Acc3} = body_ast(If, Ctx, Acc2),
     ReturnVarsIf = get_vars_snapshot(Acc3),    
     ReturnVarsElse = get_vars_init(Acc, Acc3, Ctx),
     {Vars, Acc4} =  get_vars_result(Acc3, Acc3, Ctx),                                         
@@ -278,7 +278,7 @@ ast({'if', Cond, If}, {Ctx, Acc}) ->
         erl_syntax:clause([erl_syntax:atom(true)], none, append_asts(OutIf, ReturnVarsIf)),
         erl_syntax:clause([erl_syntax:underscore()], none, [ReturnVarsElse])]),
     Ast2 = erl_syntax:match_expr(Vars, Ast),
-    {{Ast2, #ast_inf{}}, {Ctx, Acc4#tree_acc{var_pairs = tl(Acc4#tree_acc.var_pairs)}}};
+    {{Ast2, Inf}, {Ctx, Acc4#tree_acc{var_pairs = tl(Acc4#tree_acc.var_pairs)}}};
 ast({'if', Cond, If, Else}, {Ctx, Acc}) -> 
     %% TODO: handle global scope
     {OutCond, _, #tree_acc{names_set = Set}} = body_ast(Cond, Ctx, Acc),
@@ -629,21 +629,23 @@ op_ast(Unknown, _, _, _) ->
     throw({error, lists:concat(["Unknown operator: ", Unknown])}).        
  
  
-assign_ast('=', Name, _, Ast2, #js_ctx{global = true} = Ctx, Acc) ->
+assign_ast('=', Name, _, Ast2, Inf, #js_ctx{global = true} = Ctx, Acc) ->
     %% TODO: dynamic typechecking
     Ast = erl_syntax:application(none, erl_syntax:atom(put), [
         erl_syntax:atom(prefix_name(Name)), Ast2]),
-    {{[], #ast_inf{global_asts = [Ast]}}, {Ctx, Acc}};  
-assign_ast('=', _, Ast1, Ast2, Ctx, Acc) ->
+    GlobalAsts = append_asts(Inf#ast_inf.global_asts, Ast),
+    {{[], #ast_inf{global_asts = GlobalAsts}}, {Ctx, Acc}};  
+assign_ast('=', _, Ast1, Ast2, _, Ctx, Acc) ->
     %% TODO: dynamic typechecking  
     Ast = erl_syntax:match_expr(Ast1, Ast2),
     {{Ast, #ast_inf{}}, {Ctx, Acc}}; 
-assign_ast(Unknown, _, _, _, _, _) ->
+assign_ast(Unknown, _, _, _, _, _, _) ->
     throw({error, lists:concat(["Unknown assignment operator: ", Unknown])}).        
 
 
 maybe_global({{Ast, Inf}, {#js_ctx{global = true} = Ctx, Acc}}) ->
-    {{[], Inf#ast_inf{global_asts = [Ast]}}, {Ctx, Acc}};
+    GlobalAsts = append_asts(Inf#ast_inf.global_asts, Ast),
+    {{[], Inf#ast_inf{global_asts = GlobalAsts}}, {Ctx, Acc}};
 maybe_global({AstInf, CtxAcc}) ->    
     {AstInf, CtxAcc}.
     
