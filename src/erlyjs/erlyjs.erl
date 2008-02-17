@@ -35,7 +35,14 @@
 
     
 %% API
--export([compile/2, compile/3, create_lexer/0, create_parser/0, lexer_src/0, parser_src/0]).
+-export([
+    compile/2, 
+    compile/3, 
+    shell/0,
+    create_lexer/0, 
+    create_parser/0, 
+    lexer_src/0, 
+    parser_src/0]).
 
 
 compile(File, Module) ->
@@ -43,11 +50,21 @@ compile(File, Module) ->
 
 compile(File, Module, Options) ->
     erlyjs_compiler:compile(File, Module, Options).
-        
+  
+    
 %%--------------------------------------------------------------------
 %% @spec () -> any()
 %% @doc 
-%% creates the leex-based ErlyJS lexer
+%% Interactive Javascript shell
+%% @end 
+%%--------------------------------------------------------------------
+shell() ->
+    not_implemnted_yet.
+            
+%%--------------------------------------------------------------------
+%% @spec () -> any()
+%% @doc 
+%% Creates the leex-based ErlyJS lexer
 %% @end 
 %%--------------------------------------------------------------------
 create_lexer() ->
@@ -55,7 +72,8 @@ create_lexer() ->
 
 %%--------------------------------------------------------------------
 %% @spec () -> any()
-%% @doc creates the yecc-based ErlyJS parser
+%% @doc 
+%% Creates the yecc-based ErlyJS parser
 %% @end 
 %%--------------------------------------------------------------------    
 create_parser() ->

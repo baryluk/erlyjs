@@ -316,7 +316,7 @@ EmptyStatement -> ';'.
 ExpressionStatement -> Expression : '$1'.
 
 %% Variable Definition
-VariableDefinition -> var VariableDeclarationList : {'$1', '$2'}.
+VariableDefinition -> var VariableDeclarationList : {var, '$2'}.
 VariableDeclarationList -> VariableDeclaration : ['$1'].
 VariableDeclarationList -> VariableDeclarationList ',' VariableDeclaration : '$1' ++ ['$3'].
 VariableDeclaration -> identifier VariableInitializer : {'$1', '$2'}.

@@ -228,17 +228,17 @@ ast({string, _, Value}, {Ctx, Acc}) ->
 ast({{'[', _L},  Value}, {Ctx, Acc}) -> 
     %% TODO: implementation and tests, this just works for empty lists
     {{erl_syntax:list(Value), #ast_inf{}}, {Ctx, Acc}};
-ast({{identifier, _, undefined}, Value}, {Ctx, Acc}) ->  
+ast({{identifier, _, undefined}, _}, {Ctx, Acc}) ->  
     {{erl_syntax:atom(undefined), #ast_inf{}}, {Ctx, Acc}};    
-ast({{identifier, _, 'Infinity'}, Value}, {Ctx, Acc}) ->  
+ast({{identifier, _, 'Infinity'}, _}, {Ctx, Acc}) ->  
     {{erl_syntax:atom('Infinity'), #ast_inf{}}, {Ctx, Acc}};
-ast({{identifier, _, 'NaN'}, Value}, {Ctx, Acc}) ->  
+ast({{identifier, _, 'NaN'}, _}, {Ctx, Acc}) ->  
     {{erl_syntax:atom('NaN'), #ast_inf{}}, {Ctx, Acc}};
 ast({identifier, _, Name}, {Ctx, Acc}) ->  
     var_ast(Name, Ctx, Acc);
 ast({{identifier, _, Name}, Value}, {Ctx, Acc}) ->  
     var_declare(Name, Value, Ctx, Acc);  
-ast({{var, _L}, DeclarationList}, {Ctx, Acc}) ->
+ast({var, DeclarationList}, {Ctx, Acc}) ->
     {Ast, Info, Acc1} = body_ast(DeclarationList, Ctx#js_ctx{action = set}, Acc),
     {{Ast, Info}, {Ctx, Acc1}};
 ast(return, {Ctx, Acc}) -> 
@@ -469,20 +469,30 @@ var_declare(JsName, [], Ctx, #tree_acc{js_scopes = [GlobalScope]}=Acc) ->
     Dict = dict:store(JsName, prefix_name(JsName), GlobalScope#scope.names_dict),
     Args = [erl_syntax:atom(prefix_name(JsName)), erl_syntax:atom(undefined)], 
     Ast = erl_syntax:application(none, erl_syntax:atom(put), Args),
-    Acc1 = Acc#tree_acc{js_scopes=[#scope{names_dict = Dict}]}, 
-    {{[], #ast_inf{global_asts = [Ast]}}, {Ctx, Acc1}}; 
+    Acc2 = Acc#tree_acc{js_scopes=[#scope{names_dict = Dict}]}, 
+    {{[], #ast_inf{global_asts = [Ast]}}, {Ctx, Acc2}}; 
 var_declare(JsName, Value, Ctx,  #tree_acc{js_scopes = [GlobalScope]}=Acc) ->      
     Dict = dict:store(JsName, prefix_name(JsName), GlobalScope#scope.names_dict),
     Acc2 = Acc#tree_acc{js_scopes=[#scope{names_dict = Dict}]},
-    {ValueAst, Info1, Acc2} = body_ast(Value, Ctx, Acc2),
+    {ValueAst, Inf, Acc2} = body_ast(Value, Ctx, Acc2),
     Args = [erl_syntax:atom(prefix_name(JsName)), ValueAst], 
     Ast = erl_syntax:application(none, erl_syntax:atom(put), Args), 
-    Asts = [Ast | Info1#ast_inf.global_asts],
-    {{[], Info1#ast_inf{global_asts = Asts}}, {Ctx, Acc2}};  
+    Asts = [Ast | Inf#ast_inf.global_asts],
+    {{[], Inf#ast_inf{global_asts = Asts}}, {Ctx, Acc2}};  
 var_declare(Name, [], Ctx, Acc) ->
     {{AstVariable, _}, {_, Acc1}}  = var_ast(Name, Ctx, Acc),
     Ast = erl_syntax:match_expr(AstVariable, erl_syntax:atom(undefined)),  
     {{Ast, #ast_inf{}}, {Ctx, Acc1}};  
+var_declare(Name, {identifier, _, undefined}, Ctx, Acc) ->
+    io:format("TRACE ~p:~p ~p~n",[?MODULE, ?LINE, Name]),
+    {{AstVar, Inf}, {_, Acc1}}  = var_ast(Name, Ctx, Acc), 
+    {{erl_syntax:match_expr(AstVar, erl_syntax:atom(undefined)), Inf}, {Ctx, Acc1}};
+var_declare(Name, {identifier, _, 'Infinity'}, Ctx, Acc) ->
+    {{AstVar, Inf}, {_, Acc1}}  = var_ast(Name, Ctx, Acc), 
+    {{erl_syntax:match_expr(AstVar, erl_syntax:atom('Infinity')), Inf}, {Ctx, Acc1}};
+var_declare(Name, {identifier, _, 'NaN'}, Ctx, Acc) ->
+    {{AstVar, Inf}, {_, Acc1}}  = var_ast(Name, Ctx, Acc), 
+    {{erl_syntax:match_expr(AstVar, erl_syntax:atom('NaN')), Inf}, {Ctx, Acc1}};                        
 var_declare(Name, Value, Ctx, Acc) ->
     {{AstVariable, _}, {_, Acc1}}  = var_ast(Name, Ctx, Acc),
     {AstValue, Info, Acc2} = body_ast(Value, Ctx, Acc1),
