@@ -271,12 +271,11 @@ ast({'if', Cond, If}, {#js_ctx{global = true} = Ctx, Acc}) ->
     {OutCond, _, #tree_acc{names_set = Set}} = body_ast(Cond, Ctx, Acc),
     Acc2 = Acc#tree_acc{names_set = Set, var_pairs = push_var_pairs(Acc)},
     {_, Inf, Acc3} = body_ast(If, Ctx, Acc2),
-    ReturnVarsElse = get_vars_init(Acc, Acc3, Ctx),
-    {Vars, Acc4} =  get_vars_result(Acc3, Acc3, Ctx),                                         
+    ReturnVarsElse = get_vars_init(Acc, Acc3, Ctx),                                        
     Ast = erl_syntax:case_expr(OutCond, [
         erl_syntax:clause([erl_syntax:atom(true)], none, Inf#ast_inf.global_asts),
         erl_syntax:clause([erl_syntax:underscore()], none, [ReturnVarsElse])]),
-    {{[], Inf#ast_inf{global_asts = [Ast]}}, {Ctx, pop_var_pairs(Acc4)}};    
+    {{[], Inf#ast_inf{global_asts = [Ast]}}, {Ctx, pop_var_pairs(Acc3)}};    
 ast({'if', Cond, If}, {Ctx, Acc}) -> 
     {OutCond, _, #tree_acc{names_set = Set}} = body_ast(Cond, Ctx, Acc),
     Acc2 = Acc#tree_acc{names_set = Set, var_pairs = push_var_pairs(Acc)},
@@ -336,8 +335,23 @@ ast({'if', Cond, If, Else}, {Ctx, Acc}) ->
         erl_syntax:clause([erl_syntax:underscore()], none, append_asts(OutElse, ReturnVarsElse))]),
     Ast2 = erl_syntax:match_expr(erl_syntax:tuple(Vars), Ast),
     {{Ast2, #ast_inf{}}, {Ctx, pop_var_pairs(Acc3)}};   
-ast({do_while, Stmt, Cond}, {Ctx, Acc}) ->
-    %% TODO: handle global scope   
+     
+ast({do_while, Stmt, Cond}, {#js_ctx{global = true} = Ctx, Acc}) ->   
+    Acc2 = Acc#tree_acc{
+        var_pairs = push_var_pairs(Acc),
+        func_counter = inc_func_counter(Acc)},   
+    {_, Inf, Acc3} = body_ast(Stmt, Ctx, Acc2),   
+    {OutCond, _, Acc4} = body_ast(Cond, Ctx, Acc3),
+    AstFuncCond = erl_syntax:case_expr(OutCond, [
+        erl_syntax:clause([erl_syntax:atom(true)], none,
+            [erl_syntax:application(none, func_name(Acc2), [])]),
+        erl_syntax:clause([erl_syntax:underscore()], none,  
+            [get_global_vars(Acc3)])]),   
+    Func = erl_syntax:function(func_name(Acc2),
+        [erl_syntax:clause([], none, append_asts(Inf#ast_inf.global_asts, AstFuncCond))]),
+    Ast = erl_syntax:application(none, func_name(Acc2), []),
+    {{[], #ast_inf{internal_func_asts = [Func], global_asts = [Ast]}}, {Ctx, pop_var_pairs(Acc4)}};
+ast({do_while, Stmt, Cond}, {Ctx, Acc}) ->  
     Acc2 = Acc#tree_acc{
         var_pairs = push_var_pairs(Acc),
         func_counter = inc_func_counter(Acc)},   
@@ -484,6 +498,13 @@ get_vars_snapshot(Acc) ->
                 [erl_syntax:variable(Val) | AccIn]
         end, [], hd(Acc#tree_acc.var_pairs))).
         
+
+get_global_vars(Acc) ->
+    L = dict:to_list(hd(Acc#tree_acc.var_pairs)),
+    erl_syntax:tuple([erl_syntax:application(none, erl_syntax:atom(get), 
+        [erl_syntax:atom(Key)]) || {Key, _} <-  L]).
+
+
 
 %% TODO: 
 %%         
@@ -674,7 +695,8 @@ append_info(Info1, Info2) ->
     #ast_inf{
         export_asts = lists:append(Info1#ast_inf.export_asts, Info2#ast_inf.export_asts),
         global_asts = lists:append(Info1#ast_inf.global_asts, Info2#ast_inf.global_asts),
-        internal_func_asts = lists:append(Info1#ast_inf.internal_func_asts, Info2#ast_inf.internal_func_asts)}. 
+        internal_func_asts = lists:append(
+            Info1#ast_inf.internal_func_asts, Info2#ast_inf.internal_func_asts)}. 
 
 
 assign_to_op(Assign) ->
