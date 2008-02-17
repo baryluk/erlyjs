@@ -235,13 +235,13 @@ ast({{identifier, _L, Name}, Value}, {Ctx, Acc}) ->
 ast({{var, _L}, DeclarationList}, {Ctx, Acc}) ->
     {Ast, Info, Acc1} = body_ast(DeclarationList, Ctx#js_ctx{action = set}, Acc),
     {{Ast, Info}, {Ctx, Acc1}};
-ast({return, _L}, {Ctx, Acc}) -> 
+ast(return, {Ctx, Acc}) -> 
     %% TODO: eliminate this clause by adjusting the grammar
     empty_ast(Ctx, Acc);
-ast({{return, _L}, Expression}, {Ctx, Acc}) -> 
+ast({return, Expression}, {Ctx, Acc}) -> 
     %% TODO: implementation and tests, this just works for returning literals
     ast(Expression, {Ctx, Acc});
-ast({{function, _L1}, {identifier, _L2, Name}, {params, Params, body, Body}}, {Ctx, Acc}) ->
+ast({function, {identifier, _L2, Name}, {params, Params, body, Body}}, {Ctx, Acc}) ->
     func(Name, Params, Body, Ctx, Acc);      
 ast({{{identifier, _L, Name}, MemberList}, {'(', Args}}, {Ctx, Acc}) ->
     maybe_global(call(Name, MemberList, Args, Ctx, Acc));  
