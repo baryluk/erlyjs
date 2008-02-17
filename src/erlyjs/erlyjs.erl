@@ -3,7 +3,7 @@
 %%% @author    Roberto Saccon <rsaccon@gmail.com> [http://rsaccon.com]
 %%% @copyright 2007 Roberto Saccon
 %%% @doc  
-%%% Helper module to start and stop ErlyJS application
+%%% ErlyJS main module
 %%% @end  
 %%%
 %%% The MIT License
@@ -35,20 +35,32 @@
 
     
 %% API
--export([create_lexer/0, create_parser/0, lexer_src/0, parser_src/0]).
+-export([compile/2, compile/3, create_lexer/0, create_parser/0, lexer_src/0, parser_src/0]).
 
+
+compile(File, Module) ->
+    erlyjs_compiler:compile(File, Module, []).
+
+compile(File, Module, Options) ->
+    erlyjs_compiler:compile(File, Module, Options).
+        
+%%--------------------------------------------------------------------
+%% @spec () -> any()
+%% @doc 
+%% creates the leex-based ErlyJS lexer
+%% @end 
+%%--------------------------------------------------------------------
+create_lexer() ->
+    create_lexer("src/erlyjs/erlyjs_lexer", "ebin").
 
 %%--------------------------------------------------------------------
 %% @spec () -> any()
 %% @doc creates the yecc-based ErlyJS parser
 %% @end 
-%%--------------------------------------------------------------------
-create_lexer() ->
-    create_lexer("src/erlyjs/erlyjs_lexer", "ebin").
-    
+%%--------------------------------------------------------------------    
 create_parser() ->
     create_parser("src/erlyjs/erlyjs_parser", "ebin").
-        
+     
 lexer_src() ->
      filename:join(src_erlyjs_dir(), "erlyjs_lexer.xrl").
 
@@ -64,10 +76,11 @@ src_erlyjs_dir() ->
      {file, Ebin} = code:is_loaded(?MODULE),
      filename:join([filename:dirname(filename:dirname(Ebin)), "src", "erlyjs"]).
 
+
 create_lexer(Path, Outdir) ->
     case leex:file(Path) of
         ok ->
-            compile(Path, Outdir, "Lexer");
+            compile2(Path, Outdir, "Lexer");
         _ ->
             {error, "leexer generation failed"}
     end.
@@ -76,13 +89,13 @@ create_lexer(Path, Outdir) ->
 create_parser(Path, Outdir) ->
     case yecc:file(Path) of
         {ok, _} ->
-            compile(Path, Outdir, "Parser");
+            compile2(Path, Outdir, "Parser");
         _ ->
             {error, "parser generation failed"}
     end.
 
 
-compile(Path, Outdir, Name) ->
+compile2(Path, Outdir, Name) ->
     case compile:file(Path, [{outdir, Outdir}]) of
         {ok, Bin} ->
             code:purge(Bin),
@@ -95,11 +108,6 @@ compile(Path, Outdir, Name) ->
         _ ->
             {error, Name ++ "compilation failed"}
     end.
-    
-    
-%%====================================================================
-%% Internal functions
-%%===================================================================
 
             
     

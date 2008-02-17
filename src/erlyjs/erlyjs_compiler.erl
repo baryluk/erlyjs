@@ -217,21 +217,27 @@ body_ast(JsParseTree, Ctx, Acc) ->
     {Ast, Inf, Acc1}.
 
 
-ast({identifier, _L, true}, {Ctx, Acc}) -> 
+ast({identifier, _, true}, {Ctx, Acc}) -> 
     {{erl_syntax:atom(true), #ast_inf{}}, {Ctx, Acc}};
-ast({identifier, _L, false}, {Ctx, Acc}) -> 
+ast({identifier, _, false}, {Ctx, Acc}) -> 
     {{erl_syntax:atom(false), #ast_inf{}}, {Ctx, Acc}};    
-ast({integer, _L, Value}, {Ctx, Acc}) -> 
+ast({integer, _, Value}, {Ctx, Acc}) -> 
     {{erl_syntax:integer(Value), #ast_inf{}}, {Ctx, Acc}};
-ast({string, _L, Value}, {Ctx, Acc}) ->
-    {{erl_syntax:string(Value), #ast_inf{}}, {Ctx, Acc}}; %% TODO: binary instead of string
+ast({string, _, Value}, {Ctx, Acc}) ->
+    {{erl_syntax:string(Value), #ast_inf{}}, {Ctx, Acc}}; %% TODO: binary instead of string 
 ast({{'[', _L},  Value}, {Ctx, Acc}) -> 
     %% TODO: implementation and tests, this just works for empty lists
     {{erl_syntax:list(Value), #ast_inf{}}, {Ctx, Acc}};
-ast({identifier, _L, Name}, {Ctx, Acc}) ->  
+ast({{identifier, _, undefined}, Value}, {Ctx, Acc}) ->  
+    {{erl_syntax:atom(undefined), #ast_inf{}}, {Ctx, Acc}};    
+ast({{identifier, _, 'Infinity'}, Value}, {Ctx, Acc}) ->  
+    {{erl_syntax:atom('Infinity'), #ast_inf{}}, {Ctx, Acc}};
+ast({{identifier, _, 'NaN'}, Value}, {Ctx, Acc}) ->  
+    {{erl_syntax:atom('NaN'), #ast_inf{}}, {Ctx, Acc}};
+ast({identifier, _, Name}, {Ctx, Acc}) ->  
     var_ast(Name, Ctx, Acc);
-ast({{identifier, _L, Name}, Value}, {Ctx, Acc}) ->  
-    var_declare(Name, Value, Ctx, Acc);             
+ast({{identifier, _, Name}, Value}, {Ctx, Acc}) ->  
+    var_declare(Name, Value, Ctx, Acc);  
 ast({{var, _L}, DeclarationList}, {Ctx, Acc}) ->
     {Ast, Info, Acc1} = body_ast(DeclarationList, Ctx#js_ctx{action = set}, Acc),
     {{Ast, Info}, {Ctx, Acc1}};
@@ -443,6 +449,10 @@ var_ast(JsName, #js_ctx{action = set} = Ctx, Acc) ->
     
 var_ast(undefined, #js_ctx{action = get} = Ctx, Acc) ->
     {{erl_syntax:atom(undefined), #ast_inf{}}, {Ctx, Acc}};
+var_ast('Infinity', #js_ctx{action = get} = Ctx, Acc) ->
+    {{erl_syntax:atom('Infinity'), #ast_inf{}}, {Ctx, Acc}};
+var_ast('NaN', #js_ctx{action = get} = Ctx, Acc) ->
+    {{erl_syntax:atom('NaN'), #ast_inf{}}, {Ctx, Acc}};        
 var_ast(JsName, #js_ctx{action = get} = Ctx, Acc) ->
     case name_search(JsName, Acc#tree_acc.js_scopes, []) of
         not_found ->
