@@ -268,16 +268,17 @@ ast({assign, {Op, _}, {identifier, _, Name}, In1}, {Ctx, Acc}) ->
     assign_ast('=', Name, Out3, op_ast(assign_to_op(Op), Out1, Out2), Ctx, Acc2);
 ast({'if', Cond, If}, {Ctx, Acc}) -> 
     %% TODO: handle global scope
-    {OutCond, _, #tree_acc{names_set = Set1}} = body_ast(Cond, Ctx, Acc),
-    {OutIf, _, Acc1} = body_ast(If, Ctx, Acc#tree_acc{names_set = Set1, var_pairs = [dict:new() | Acc#tree_acc.var_pairs]}),
-    ReturnVarsIf = get_vars_snapshot(Acc1),    
-    ReturnVarsElse = get_vars_init(Acc, Acc1, Ctx),
-    {Vars, Acc2} =  get_vars_result(Acc1, Acc1, Ctx),                                         
+    {OutCond, _, #tree_acc{names_set = Set}} = body_ast(Cond, Ctx, Acc),
+    Acc2 = Acc#tree_acc{names_set = Set, var_pairs = [dict:new() | Acc#tree_acc.var_pairs]},
+    {OutIf, _, Acc3} = body_ast(If, Ctx, Acc2),
+    ReturnVarsIf = get_vars_snapshot(Acc3),    
+    ReturnVarsElse = get_vars_init(Acc, Acc3, Ctx),
+    {Vars, Acc4} =  get_vars_result(Acc3, Acc3, Ctx),                                         
     Ast = erl_syntax:case_expr(OutCond, [
         erl_syntax:clause([erl_syntax:atom(true)], none, append_asts(OutIf, ReturnVarsIf)),
         erl_syntax:clause([erl_syntax:underscore()], none, [ReturnVarsElse])]),
     Ast2 = erl_syntax:match_expr(Vars, Ast),
-    {{Ast2, #ast_inf{}}, {Ctx, Acc2#tree_acc{var_pairs = tl(Acc2#tree_acc.var_pairs)}}};
+    {{Ast2, #ast_inf{}}, {Ctx, Acc4#tree_acc{var_pairs = tl(Acc4#tree_acc.var_pairs)}}};
 ast({'if', Cond, If, Else}, {Ctx, Acc}) -> 
     %% TODO: handle global scope
     {OutCond, _, #tree_acc{names_set = Set}} = body_ast(Cond, Ctx, Acc),
@@ -346,8 +347,29 @@ ast({do_while, Stmt, Cond}, {Ctx, Acc}) ->
         erl_syntax:application(none, func_name(Acc2), [VarsBefore])),  
     {{[Ast], #ast_inf{internal_func_asts = [Func]}}, {Ctx, Acc5#tree_acc{var_pairs = tl(Acc5#tree_acc.var_pairs)}}};   
 ast({while, Cond, Stmt}, {Ctx, Acc}) ->
-    %% TODO: everything
-    {{[], #ast_inf{}}, {Ctx, Acc}};
+    %% TODO: handle global scope 
+    {OutCond, _, #tree_acc{names_set = Set}} = body_ast(Cond, Ctx, Acc),
+    Acc2 = Acc#tree_acc{
+        names_set = Set, 
+        var_pairs = [dict:new() | Acc#tree_acc.var_pairs],
+        func_counter = Acc#tree_acc.func_counter + 1},
+    {OutStmt, _, Acc3} = body_ast(Stmt, Ctx, Acc2),
+    VarsBefore = get_vars_init(Acc, Acc3, Ctx),
+    VarsAfterStmt = get_vars_snapshot(Acc3),
+    {VarsAfter, Acc4} = get_vars_result(Acc3, Acc3, Ctx),
+    
+    AstFuncCond = erl_syntax:case_expr(OutCond, [
+        erl_syntax:clause([erl_syntax:atom(true)], none,
+            append_asts(OutStmt, erl_syntax:application(none, func_name(Acc2), [VarsAfterStmt]))),
+        erl_syntax:clause([erl_syntax:underscore()], none,  
+            [VarsBefore])]),
+            
+    Func = erl_syntax:function(func_name(Acc2),
+        [erl_syntax:clause([VarsBefore], none, [AstFuncCond])]),
+    
+    Ast = erl_syntax:match_expr(VarsAfter, 
+        erl_syntax:application(none, func_name(Acc3), [VarsBefore])),           
+    {{[Ast], #ast_inf{internal_func_asts = [Func]}}, {Ctx, Acc4#tree_acc{var_pairs = tl(Acc4#tree_acc.var_pairs)}}}; 
 ast(Unknown, _) ->
     throw({error, lists:concat(["Unknown token: ", Unknown])}). 
     
