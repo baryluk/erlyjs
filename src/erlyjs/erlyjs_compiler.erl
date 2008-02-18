@@ -236,7 +236,14 @@ ast({{identifier, _, 'NaN'}, _}, {Ctx, Acc}) ->
     {{erl_syntax:atom('NaN'), #ast_inf{}}, {Ctx, Acc}};
 ast({identifier, _, Name}, {Ctx, Acc}) ->  
     var_ast(Name, Ctx, Acc);
-ast({{identifier, _, Name}, Value}, {Ctx, Acc}) ->  
+
+ast({{identifier, _, Name} , {'(', Args}}, {Ctx, Acc}) ->  
+    global_call(Name, Args, Ctx, Acc);  
+ast({{{identifier, _, Name}, MemberList}, {'(', Args}}, {Ctx, Acc}) ->
+    %% TODO: needs complete rewrite
+    call(Name, MemberList, Args, Ctx, Acc);  
+
+ast({{identifier, _, Name}, Value}, {Ctx, Acc}) -> 
     var_declare(Name, Value, Ctx, Acc);  
 ast({var, DeclarationList}, {Ctx, Acc}) ->
     {Ast, Info, Acc1} = body_ast(DeclarationList, Ctx#js_ctx{action = set}, Acc),
@@ -245,13 +252,10 @@ ast(return, {Ctx, Acc}) ->
     %% TODO: eliminate this clause by adjusting the grammar
     empty_ast(Ctx, Acc);
 ast({return, Expression}, {Ctx, Acc}) -> 
-    %% TODO: implementation and tests, this just works for returning literals
+    %% TODO: implementation and tests, this doesnt't work generally
     ast(Expression, {Ctx, Acc});
 ast({function, {identifier, _L2, Name}, {params, Params, body, Body}}, {Ctx, Acc}) ->
-    func(Name, Params, Body, Ctx, Acc);      
-ast({{{identifier, _L, Name}, MemberList}, {'(', Args}}, {Ctx, Acc}) ->
-    %% TODO: needs complete rewrite
-    maybe_global(call(Name, MemberList, Args, Ctx, Acc));  
+    func(Name, Params, Body, Ctx, Acc);   
 ast({op, {Op, _}, In}, {Ctx, Acc}) ->
     {Out, _, #tree_acc{names_set = Set}} = body_ast(In, Ctx, Acc),
     {{op_ast(Op, Out), #ast_inf{}}, {Ctx, Acc#tree_acc{names_set = Set}}};
@@ -295,7 +299,7 @@ ast({'if', Cond, If}, {Ctx, Acc}) ->
     Ast2 = erl_syntax:match_expr(Vars, Ast),
     {{Ast2, #ast_inf{}}, {Ctx, pop_var_pairs(Acc4)}};
 ast({'if', Cond, If, Else}, {Ctx, Acc}) -> 
-    %% TODO: refacor and handle global scope
+    %% TODO: refactor and handle global scope
     {OutCond, _, #tree_acc{names_set = Set}} = body_ast(Cond, Ctx, Acc),
     AccOutIfIn = Acc#tree_acc{names_set = Set, var_pairs = push_var_pairs(Acc)},
     {OutIf, _, #tree_acc{names_set = Set1} = Acc1} = body_ast(If, Ctx, AccOutIfIn), 
@@ -340,8 +344,7 @@ ast({'if', Cond, If, Else}, {Ctx, Acc}) ->
         erl_syntax:clause([erl_syntax:atom(true)], none, append_asts(OutIf, ReturnVarsIf)),
         erl_syntax:clause([erl_syntax:underscore()], none, append_asts(OutElse, ReturnVarsElse))]),
     Ast2 = erl_syntax:match_expr(erl_syntax:tuple(Vars), Ast),
-    {{Ast2, #ast_inf{}}, {Ctx, pop_var_pairs(Acc3)}};   
-     
+    {{Ast2, #ast_inf{}}, {Ctx, pop_var_pairs(Acc3)}};    
 ast({do_while, Stmt, Cond}, {#js_ctx{global = true} = Ctx, Acc}) ->   
     Acc2 = Acc#tree_acc{
         var_pairs = push_var_pairs(Acc),
@@ -598,13 +601,22 @@ func(Name, Params, Body, Ctx, Acc) ->
     end.
 
 
-    
+global_call(parseInt, [{string, _, Str}], Ctx, Acc) ->
+    Ast = erlyjs_global_funcs:parse_int(Str, 10),
+    maybe_global({{Ast, #ast_inf{}}, {Ctx, Acc}});
+global_call(parseInt, [{string, _, Str},{integer, _, Radix}], Ctx, Acc) ->
+    Ast = erlyjs_global_funcs:parse_int(Str, Radix),
+    maybe_global({{Ast, #ast_inf{}}, {Ctx, Acc}});  
+global_call(Name, _, _, _) ->
+    throw({error, lists:concat(["No such global function: ", Name])}).
+
+      
 call(Name, MemberList, Args, Ctx, Acc) ->
     case check_call(Name, MemberList) of
         {Module, Function} ->
             {Args1, _, Acc1} = body_ast(Args, Ctx, Acc),    
             Ast = erl_syntax:application(erl_syntax:atom(Module), erl_syntax:atom(Function), Args1),
-            {{Ast, #ast_inf{}}, {Ctx, Acc1}};
+            maybe_global({{Ast, #ast_inf{}}, {Ctx, Acc1}});
         _ ->
             throw({error, lists:concat(["No such function: ", todo_prettyprint_functionname])})
     end.
