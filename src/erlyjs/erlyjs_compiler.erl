@@ -240,13 +240,11 @@ ast({{identifier, _, 'NaN'}, _}, {Ctx, Acc}) ->
     {{erl_syntax:atom('NaN'), #ast_inf{}}, {Ctx, Acc}};
 ast({identifier, _, Name}, {Ctx, Acc}) ->  
     var_ast(Name, Ctx, Acc);
-
 ast({{identifier, _, Name} , {'(', Args}}, {Ctx, Acc}) ->  
     global_call(Name, Args, Ctx, Acc);  
 ast({{{identifier, _, Name}, MemberList}, {'(', Args}}, {Ctx, Acc}) ->
     %% TODO: needs complete rewrite
     call(Name, MemberList, Args, Ctx, Acc);  
-
 ast({{identifier, _, Name}, Value}, {Ctx, Acc}) -> 
     var_declare(Name, Value, Ctx, Acc);  
 ast({var, DeclarationList}, {Ctx, Acc}) ->
@@ -262,16 +260,16 @@ ast({function, {identifier, _L2, Name}, {params, Params, body, Body}}, {Ctx, Acc
     func(Name, Params, Body, Ctx, Acc);   
 ast({op, {Op, _}, In}, {Ctx, Acc}) ->
     {Out, _, #tree_acc{names_set = Set}} = body_ast(In, Ctx, Acc),
-    {{op_ast(Op, Out), #ast_inf{}}, {Ctx, Acc#tree_acc{names_set = Set}}};
+    {{erlyjs_operators:ast(Op, Out), #ast_inf{}}, {Ctx, Acc#tree_acc{names_set = Set}}};
 ast({op, {Op, _}, In1, In2}, {Ctx, Acc}) ->
     {Out1, _, #tree_acc{names_set = Set1}} = body_ast(In1, Ctx, Acc),
     {Out2, _, #tree_acc{names_set = Set2}} = body_ast(In2, Ctx, Acc#tree_acc{names_set = Set1}),
-    {{op_ast(Op, Out1, Out2), #ast_inf{}}, {Ctx, Acc#tree_acc{names_set = Set2}}};
+    {{erlyjs_operators:ast(Op, Out1, Out2), #ast_inf{}}, {Ctx, Acc#tree_acc{names_set = Set2}}};
 ast({op, Op, In1, In2, In3}, {Ctx, Acc}) ->
     {Out1, _, #tree_acc{names_set = Set1}} = body_ast(In1, Ctx, Acc),
     {Out2, _, #tree_acc{names_set = Set2}} = body_ast(In2, Ctx, Acc#tree_acc{names_set = Set1}),
     {Out3, _, #tree_acc{names_set = Set3}} = body_ast(In3, Ctx, Acc#tree_acc{names_set = Set2}),
-    {{op_ast(Op, Out1, Out2, Out3), #ast_inf{}}, {Ctx, Acc#tree_acc{names_set = Set3}}}; 
+    {{erlyjs_operators:ast(Op, Out1, Out2, Out3), #ast_inf{}}, {Ctx, Acc#tree_acc{names_set = Set3}}}; 
 ast({assign, {'=', _}, {identifier, _, Name}, In1}, {Ctx, Acc}) ->  
     {{Out2, _}, {_, Acc1}} = var_ast(Name, Ctx#js_ctx{action = set}, Acc),  
     {Out3, Inf, _} = body_ast(In1, Ctx, Acc),  
@@ -280,7 +278,7 @@ ast({assign, {Op, _}, {identifier, _, Name}, In1}, {Ctx, Acc}) ->
     {{Out2, _}, _} = var_ast(Name, Ctx, Acc),  
     {Out3, Inf, Acc1} = body_ast(In1, Ctx, Acc),    
     {{Out4, _}, {_, Acc2}} = var_ast(Name, Ctx#js_ctx{action = set}, Acc1), 
-    assign_ast('=', Name, Out4, op_ast(assign_to_op(Op), Out2, Out3), Inf, Ctx, Acc2);  
+    assign_ast('=', Name, Out4, erlyjs_operators:ast(assign_to_op(Op), Out2, Out3), Inf, Ctx, Acc2);  
 ast({'if', Cond, If}, {#js_ctx{global = true} = Ctx, Acc}) -> 
     {OutCond, _, #tree_acc{names_set = Set}} = body_ast(Cond, Ctx, Acc),
     Acc2 = Acc#tree_acc{names_set = Set, var_pairs = push_var_pairs(Acc)},
@@ -603,14 +601,19 @@ func(Name, Params, Body, Ctx, Acc) ->
         _ ->
             {{Ast1, Inf}, {Ctx, Acc}}
     end.
-
-global_call(parseFloat, [{string, _, Str}], Ctx, Acc) ->
+    
+    
+global_call(isFinite, [{_, _, X} | _], Ctx, Acc) ->
+    Ast = erl_syntax:application(erl_syntax:atom(erlyjs_global_funcs), 
+        erl_syntax:atom(isFinite), [erl_syntax:variable()]),
+    {{Ast, #ast_inf{}}, {Ctx, Acc}};
+global_call(parseFloat, [{string, _, Str} | _], Ctx, Acc) ->
     Ast = erl_syntax:application(erl_syntax:atom(erlyjs_global_funcs), 
         erl_syntax:atom(parse_float), [erl_syntax:string(Str)]),
     {{Ast, #ast_inf{}}, {Ctx, Acc}};        
 global_call(parseInt, [{string, _, Str}], Ctx, Acc) ->
     Ast = erl_syntax:application(erl_syntax:atom(erlyjs_global_funcs), 
-        erl_syntax:atom(parse_int), [erl_syntax:string(Str), erl_syntax:integer(10)]),  
+        erl_syntax:atom(parse_int), [erl_syntax:string(Str)]),  
     {{Ast, #ast_inf{}}, {Ctx, Acc}};
 global_call(parseInt, [{string, _, Str},{integer, _, Radix}], Ctx, Acc) ->
     Ast = erl_syntax:application(erl_syntax:atom(erlyjs_global_funcs), 
@@ -629,102 +632,6 @@ call(Name, MemberList, Args, Ctx, Acc) ->
         _ ->
             throw({error, lists:concat(["No such function: ", todo_prettyprint_functionname])})
     end.
-
-   
-op_ast('++', Ast) ->
-    %% TODO: dynamic typechecking and implemenntation
-    erl_syntax:infix_expr(Ast, erl_syntax:operator('+'), erl_syntax:integer(1));
-op_ast('--', Ast) ->
-    %% TODO: dynamic typechecking and implemenntation
-    erl_syntax:infix_expr(Ast, erl_syntax:operator('-'), erl_syntax:integer(1));
-op_ast('-' = Op, Ast) ->
-    %% TODO: dynamic typechecking and implemenntation
-    erl_syntax:infix_expr(erl_syntax:integer(0), erl_syntax:operator(Op), Ast);
-op_ast('~', Ast) ->
-    %% TODO: dynamic typechecking and implemenntation
-    erl_syntax:prefix_expr(erl_syntax:operator('bnot'), Ast);   
-op_ast('!', Ast) ->
-    erl_syntax:case_expr(Ast, [
-        erl_syntax:clause([erl_syntax:atom(false)], none, [erl_syntax:atom(true)]),
-        erl_syntax:clause([erl_syntax:underscore()], none, [erl_syntax:atom(false)])]).
-           
-op_ast('*' = Op, Ast1, Ast2) ->
-    %% TODO: dynamic typechecking
-    erl_syntax:infix_expr(Ast1, erl_syntax:operator(Op), Ast2);
-op_ast('/' = Op, Ast1, Ast2) ->
-    %% TODO: dynamic typechecking
-    erl_syntax:infix_expr(Ast1, erl_syntax:operator(Op), Ast2);
-op_ast('%', Ast1, Ast2) ->
-    %% TODO: dynamic typechecking
-    erl_syntax:infix_expr(Ast1, erl_syntax:operator('rem'), Ast2);    
-op_ast('+' = Op, Ast1, Ast2) ->
-    %% TODO: dynamic typechecking
-    erl_syntax:infix_expr(Ast1, erl_syntax:operator(Op), Ast2);
-op_ast('-' = Op, Ast1, Ast2) ->
-    %% TODO: dynamic typechecking
-    erl_syntax:infix_expr(Ast1, erl_syntax:operator(Op), Ast2);
-op_ast('<<', Ast1, Ast2) ->
-    %% TODO: dynamic typechecking
-    erl_syntax:infix_expr(Ast1, erl_syntax:operator("bsl"), Ast2);
-op_ast('>>', Ast1, Ast2) ->
-    %% TODO: dynamic typechecking
-    erl_syntax:infix_expr(Ast1, erl_syntax:operator("bsr"), Ast2);  
-op_ast('>>>', _Ast1, _Ast2) ->
-    %% TODO: implementation and dynamic typechecking
-    %% right-shift 9 with 2 
-    %% <<Val:30, Ignore:2>> = <<9:32>>.
-    %% Result = <<0:2, Val:30>>.  
-    %% how do we handle negatie numbers (two complement format) ?
-    erl_syntax:atom(not_implemented_yet);    
-op_ast('<' = Op, Ast1, Ast2) ->
-    %% TODO: dynamic typechecking
-    erl_syntax:infix_expr(Ast1, erl_syntax:operator(Op), Ast2);
-op_ast('>' = Op, Ast1, Ast2) ->
-    %% TODO: dynamic typechecking
-    erl_syntax:infix_expr(Ast1, erl_syntax:operator(Op), Ast2);
-op_ast('<=', Ast1, Ast2) ->
-    %% TODO: dynamic typechecking
-    erl_syntax:infix_expr(Ast1, erl_syntax:operator('=<'), Ast2);
-op_ast('>=' = Op, Ast1, Ast2) ->
-    %% TODO: dynamic typechecking
-    erl_syntax:infix_expr(Ast1, erl_syntax:operator(Op), Ast2);
-op_ast('==' = Op, Ast1, Ast2) ->
-    %% TODO: dynamic typechecking
-    erl_syntax:infix_expr(Ast1, erl_syntax:operator(Op), Ast2);
-op_ast('!=', Ast1, Ast2) ->
-    %% TODO: dynamic typechecking
-    erl_syntax:infix_expr(Ast1, erl_syntax:operator('/='), Ast2);
-op_ast('===', Ast1, Ast2) ->
-    %% TODO: dynamic typechecking
-    erl_syntax:infix_expr(Ast1, erl_syntax:operator('=:='), Ast2);
-op_ast('!==', Ast1, Ast2) ->
-    %% TODO: dynamic typechecking
-    erl_syntax:infix_expr(Ast1, erl_syntax:operator('=/='), Ast2);
-op_ast('&', Ast1, Ast2) ->
-    %% TODO: dynamic typechecking
-    erl_syntax:infix_expr(Ast1, erl_syntax:operator('band'), Ast2);
-op_ast('^', Ast1, Ast2) ->
-    %% TODO: dynamic typechecking
-    erl_syntax:infix_expr(Ast1, erl_syntax:operator('bxor'), Ast2);
-op_ast('|' , Ast1, Ast2) ->
-    %% TODO: dynamic typechecking
-    erl_syntax:infix_expr(Ast1, erl_syntax:operator('bor'), Ast2);
-op_ast('&&', Ast1, Ast2) ->
-    %% TODO: dynamic typechecking
-    erl_syntax:infix_expr(Ast1, erl_syntax:operator('and'), Ast2);
-op_ast('||', Ast1, Ast2) ->
-    %% TODO: dynamic typechecking
-    erl_syntax:infix_expr(Ast1, erl_syntax:operator('or'), Ast2);
-op_ast(Unknown, _, _) ->    
-    throw({error, lists:concat(["Unknown operator: ", Unknown])}).
-    
-op_ast('cond', Ast1, Ast2, Ast3) ->
-    %% TODO: dynamic typechecking    
-    erl_syntax:case_expr(Ast1, [
-        erl_syntax:clause([erl_syntax:atom(true)], none, [Ast2]),
-        erl_syntax:clause([erl_syntax:underscore()], none, [Ast3])]);
-op_ast(Unknown, _, _, _) ->    
-    throw({error, lists:concat(["Unknown operator: ", Unknown])}).        
  
  
 assign_ast('=', Name, _, Ast2, Inf, #js_ctx{global = true} = Ctx, Acc) ->

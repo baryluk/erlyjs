@@ -35,6 +35,14 @@
 
 %% API
 -export([
+    decodeURI/1,
+    decodeURIComponent/1,
+    encodeURI/1,
+    encodeURIComponent/1,
+    eval/1,
+    is_finite/1,
+    is_not_a_number/1,
+    parse_int/1,
     parse_int/2,
     parse_float/1]).
 
@@ -46,8 +54,50 @@
 %% @doc
 %% @end 
 %%--------------------------------------------------------------------
-parse_int(Str, 10) ->
-    %% TODO: a lot, this is just the most simple case
+
+decodeURI(_Str) ->
+    exit(not_implemented_yet).
+
+
+decodeURIComponent(_Str) ->
+    exit(not_implemented_yet).
+
+
+encodeURI(_Str) ->
+    exit(not_implemented_yet).
+
+
+encodeURIComponent(_Str) ->
+    exit(not_implemented_yet).
+
+
+eval(_Str) ->
+    exit(not_implemented_yet).
+    
+    
+%% TODO: check for positive infinity or negative infinity
+is_finite('NaN') ->
+    false;
+is_finite(X) ->
+    is_not_a_number(X).
+    
+    
+%% TODO: check for positive infinity or negative infinity    
+is_not_a_number('NaN') ->
+    true;
+is_not_a_number(X) when is_number(X) ->
+    false;
+is_not_a_number(X) ->
+    case is_not_a_number(parse_int(X)) of
+        false ->
+            is_not_a_number(parse_float(X));
+        _ ->
+            true
+    end.
+
+            
+%% TODO: a lot, this is just the most simple case
+parse_int(Str) ->
     try list_to_integer(Str) of
         Val -> Val
     catch
@@ -55,9 +105,13 @@ parse_int(Str, 10) ->
     end.
     
     
-parse_float(Str) ->
-    %% TODO: a lot, this is just the most simple case
-    try list_to_float(Str) of
+parse_int(_Str, _Radix) ->
+    exit(not_implemented_yet).
+        
+            
+%% TODO: a lot, this is just the most simple case    
+parse_float(X) ->
+    try list_to_float(X) of
         Val -> Val
     catch
         error:badarg -> 'NaN'
