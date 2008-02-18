@@ -611,22 +611,15 @@ func(Name, Params, Body, Ctx, Acc) ->
 global_call(parseFloat, [{string, _, Str}], Ctx, Acc) ->
     Ast = erl_syntax:application(erl_syntax:atom(erlyjs_global_funcs), 
         erl_syntax:atom(parse_float), [erl_syntax:string(Str)]),
-    maybe_global({{Ast, #ast_inf{}}, {Ctx, Acc}});        
+    {{Ast, #ast_inf{}}, {Ctx, Acc}};        
 global_call(parseInt, [{string, _, Str}], Ctx, Acc) ->
-    %% Ast = erlyjs_global_funcs:parse_int(Str, 10),
-    
     Ast = erl_syntax:application(erl_syntax:atom(erlyjs_global_funcs), 
-        erl_syntax:atom(parse_int), [
-            erl_syntax:string(Str), erl_syntax:integer(10)]),
-    
-    io:format("TRACE ~p:~p ~p~n",[?MODULE, ?LINE, Ast]),
-    maybe_global({{Ast, #ast_inf{}}, {Ctx, Acc}});
+        erl_syntax:atom(parse_int), [erl_syntax:string(Str), erl_syntax:integer(10)]),  
+    {{Ast, #ast_inf{}}, {Ctx, Acc}};
 global_call(parseInt, [{string, _, Str},{integer, _, Radix}], Ctx, Acc) ->
-    %% Ast = erlyjs_global_funcs:parse_int(Str, Radix),
     Ast = erl_syntax:application(erl_syntax:atom(erlyjs_global_funcs), 
-        erl_syntax:atom(parse_int), [
-            erl_syntax:string(Str), erl_syntax:integer(Radix)]),
-    maybe_global({{Ast, #ast_inf{}}, {Ctx, Acc}});  
+        erl_syntax:atom(parse_int), [erl_syntax:string(Str), erl_syntax:integer(Radix)]),
+    {{Ast, #ast_inf{}}, {Ctx, Acc}};  
 global_call(Name, _, _, _) ->
     throw({error, lists:concat(["No such global function: ", Name])}).
 
@@ -754,6 +747,7 @@ assign_ast(Unknown, _, _, _, _, _, _) ->
 
 maybe_global({{Ast, Inf}, {#js_ctx{global = true} = Ctx, Acc}}) ->
     GlobalAsts = append_asts(Inf#ast_inf.global_asts, Ast),
+    io:format("TRACE ~p:~p ~p~n",[?MODULE, ?LINE, GlobalAsts]),
     {{[], Inf#ast_inf{global_asts = GlobalAsts}}, {Ctx, Acc}};
 maybe_global({AstInf, CtxAcc}) ->    
     {AstInf, CtxAcc}.
