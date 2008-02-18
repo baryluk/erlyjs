@@ -1,6 +1,6 @@
 // Mandatory. Provide here a description of the test case.
 function test_description() {
-    return "Global function 'parseFloat'";
+    return "Global function 'isNaN'";
 }
 
 // Mandatory. Provide here the arguments the testsuite will use 
@@ -11,7 +11,7 @@ function test_args() {
 
 // Mandatory. Provide here the expected test result. 
 function test_ok() {
-    return 15.6;
+    return false;
 }
 
 // Optional. Provide here any global code.
@@ -21,9 +21,9 @@ function test_ok() {
 // Testsuite invokes this function with the arguments from test_args()
 // and compares the return value with the expected result from test_result().
 function test() {
-    var a, b="15.6";
+    var a, b="12.0";
     
-    a = parseFloat(b);
+    a = isNaN(b);
     
     return a;
 }

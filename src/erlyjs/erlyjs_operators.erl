@@ -61,6 +61,7 @@ ast('!', Ast) ->
         erl_syntax:clause([erl_syntax:atom(false)], none, [erl_syntax:atom(true)]),
         erl_syntax:clause([erl_syntax:underscore()], none, [erl_syntax:atom(false)])]).
            
+           
 ast('*' = Op, Ast1, Ast2) ->
     %% TODO: dynamic typechecking
     erl_syntax:infix_expr(Ast1, erl_syntax:operator(Op), Ast2);
@@ -130,6 +131,7 @@ ast('||', Ast1, Ast2) ->
     erl_syntax:infix_expr(Ast1, erl_syntax:operator('or'), Ast2);
 ast(Unknown, _, _) ->    
     throw({error, lists:concat(["Unknown operator: ", Unknown])}).
+  
     
 ast('cond', Ast1, Ast2, Ast3) ->
     %% TODO: dynamic typechecking    

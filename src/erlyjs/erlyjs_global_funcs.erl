@@ -40,11 +40,11 @@
     encodeURI/1,
     encodeURIComponent/1,
     eval/1,
-    is_finite/1,
-    is_not_a_number/1,
-    parse_int/1,
-    parse_int/2,
-    parse_float/1]).
+    isFinite/1,
+    isNaN/1,
+    parseInt/1,
+    parseInt/2,
+    parseFloat/1]).
 
 %%====================================================================
 %% API
@@ -76,28 +76,26 @@ eval(_Str) ->
     
     
 %% TODO: check for positive infinity or negative infinity
-is_finite('NaN') ->
-    false;
-is_finite(X) ->
-    is_not_a_number(X).
+isFinite(X) ->
+    not isNaN(X).
     
     
 %% TODO: check for positive infinity or negative infinity    
-is_not_a_number('NaN') ->
+isNaN('NaN') ->
     true;
-is_not_a_number(X) when is_number(X) ->
+isNaN(X) when is_number(X) ->
     false;
-is_not_a_number(X) ->
-    case is_not_a_number(parse_int(X)) of
-        false ->
-            is_not_a_number(parse_float(X));
+isNaN(X) ->
+    case isNaN(parseInt(X)) of
+        true ->
+            isNaN(parseFloat(X));
         _ ->
-            true
+            false
     end.
 
             
 %% TODO: a lot, this is just the most simple case
-parse_int(Str) ->
+parseInt(Str) ->
     try list_to_integer(Str) of
         Val -> Val
     catch
@@ -105,12 +103,12 @@ parse_int(Str) ->
     end.
     
     
-parse_int(_Str, _Radix) ->
+parseInt(_Str, _Radix) ->
     exit(not_implemented_yet).
         
             
 %% TODO: a lot, this is just the most simple case    
-parse_float(X) ->
+parseFloat(X) ->
     try list_to_float(X) of
         Val -> Val
     catch

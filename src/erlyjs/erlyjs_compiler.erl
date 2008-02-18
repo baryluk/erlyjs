@@ -240,11 +240,10 @@ ast({{identifier, _, 'NaN'}, _}, {Ctx, Acc}) ->
     {{erl_syntax:atom('NaN'), #ast_inf{}}, {Ctx, Acc}};
 ast({identifier, _, Name}, {Ctx, Acc}) ->  
     var_ast(Name, Ctx, Acc);
-ast({{identifier, _, Name} , {'(', Args}}, {Ctx, Acc}) ->  
-    global_call(Name, Args, Ctx, Acc);  
-ast({{{identifier, _, Name}, MemberList}, {'(', Args}}, {Ctx, Acc}) ->
-    %% TODO: needs complete rewrite
-    call(Name, MemberList, Args, Ctx, Acc);  
+ast({{identifier, _, Name} , {'(', Args}}, {Ctx, Acc}) ->
+    call(Name, Args, Ctx, Acc);  
+ast({{{identifier, _, Name}, Names}, {'(', Args}}, {Ctx, Acc}) ->
+    call(Name, Names, Args, Ctx, Acc);  
 ast({{identifier, _, Name}, Value}, {Ctx, Acc}) -> 
     var_declare(Name, Value, Ctx, Acc);  
 ast({var, DeclarationList}, {Ctx, Acc}) ->
@@ -602,29 +601,23 @@ func(Name, Params, Body, Ctx, Acc) ->
             {{Ast1, Inf}, {Ctx, Acc}}
     end.
     
-    
-global_call(isFinite, [{_, _, X} | _], Ctx, Acc) ->
-    Ast = erl_syntax:application(erl_syntax:atom(erlyjs_global_funcs), 
-        erl_syntax:atom(isFinite), [erl_syntax:variable()]),
-    {{Ast, #ast_inf{}}, {Ctx, Acc}};
-global_call(parseFloat, [{string, _, Str} | _], Ctx, Acc) ->
-    Ast = erl_syntax:application(erl_syntax:atom(erlyjs_global_funcs), 
-        erl_syntax:atom(parse_float), [erl_syntax:string(Str)]),
-    {{Ast, #ast_inf{}}, {Ctx, Acc}};        
-global_call(parseInt, [{string, _, Str}], Ctx, Acc) ->
-    Ast = erl_syntax:application(erl_syntax:atom(erlyjs_global_funcs), 
-        erl_syntax:atom(parse_int), [erl_syntax:string(Str)]),  
-    {{Ast, #ast_inf{}}, {Ctx, Acc}};
-global_call(parseInt, [{string, _, Str},{integer, _, Radix}], Ctx, Acc) ->
-    Ast = erl_syntax:application(erl_syntax:atom(erlyjs_global_funcs), 
-        erl_syntax:atom(parse_int), [erl_syntax:string(Str), erl_syntax:integer(Radix)]),
-    {{Ast, #ast_inf{}}, {Ctx, Acc}};  
-global_call(Name, _, _, _) ->
-    throw({error, lists:concat(["No such global function: ", Name])}).
-
       
+call(Name, Args, Ctx, Acc) ->
+    Arity = length(Args),
+    case native_global_func(Name, Arity) of
+        ok ->     
+            {Args2, _, Acc2} = body_ast(Args, Ctx, Acc),  
+            Ast = erl_syntax:application(erl_syntax:atom(erlyjs_global_funcs), 
+                erl_syntax:atom(Name), Args2),
+            {{Ast, #ast_inf{}}, {Ctx, Acc2}};
+        _ ->
+            throw({error, lists:concat(["No such global function: ", 
+                Name, " (arity: ", Arity, ")"])})
+    end.
+
+
 call(Name, MemberList, Args, Ctx, Acc) ->
-    case check_call(Name, MemberList) of
+    case api_func(Name, MemberList) of
         {Module, Function} ->
             {Args1, _, Acc1} = body_ast(Args, Ctx, Acc),    
             Ast = erl_syntax:application(erl_syntax:atom(Module), erl_syntax:atom(Function), Args1),
@@ -632,7 +625,25 @@ call(Name, MemberList, Args, Ctx, Acc) ->
         _ ->
             throw({error, lists:concat(["No such function: ", todo_prettyprint_functionname])})
     end.
- 
+        
+
+native_global_func(decodeURI, 1) -> ok;
+native_global_func(decodeURIComponent, 1) -> ok;
+native_global_func(encodeURI, 1) -> ok;
+native_global_func(encodeURIComponent, 1) -> ok;
+native_global_func(eval, 1) -> ok;
+native_global_func(isFinite, 1) -> ok;
+native_global_func(isNaN, 1) -> ok;
+native_global_func(parseInt, 1) -> ok;
+native_global_func(parseInt, 2) -> ok;
+native_global_func(parseFloat, 1) -> ok;
+native_global_func(_, _) -> false.
+
+api_func(console, [log])  ->
+    {erlyjs_api_console, log};
+api_func(_, _) ->
+    false.
+         
  
 assign_ast('=', Name, _, Ast2, Inf, #js_ctx{global = true} = Ctx, Acc) ->
     %% TODO: dynamic typechecking
@@ -695,13 +706,7 @@ push_var_pairs(Acc) ->
 inc_func_counter(Acc) ->    
     Acc#tree_acc.func_counter + 1.
 
-               
-check_call(console, [log])  ->
-    {erlyjs_api_console, log};
-check_call(_, _) ->
-    error.
-    
-    
+                   
 trace(Module, Line, Title, Content, Ctx) ->
     case Ctx#js_ctx.verbose of
         true ->
