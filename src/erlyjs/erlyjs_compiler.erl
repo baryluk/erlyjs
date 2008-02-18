@@ -242,11 +242,7 @@ ast({identifier, _, Name}, {Ctx, Acc}) ->
     var_ast(Name, Ctx, Acc);
 
 ast({{identifier, _, Name} , {'(', Args}}, {Ctx, Acc}) ->  
-    R=global_call(Name, Args, Ctx, Acc),
-    {{A,I},_} = R,
-    io:format("TRACE ~p:~p >>~p~n",[?MODULE, ?LINE, A]),
-    io:format("TRACE ~p:~p >>>>~p~n",[?MODULE, ?LINE, I#ast_inf.global_asts]),
-    R;  
+    global_call(Name, Args, Ctx, Acc);  
 ast({{{identifier, _, Name}, MemberList}, {'(', Args}}, {Ctx, Acc}) ->
     %% TODO: needs complete rewrite
     call(Name, MemberList, Args, Ctx, Acc);  
@@ -747,7 +743,6 @@ assign_ast(Unknown, _, _, _, _, _, _) ->
 
 maybe_global({{Ast, Inf}, {#js_ctx{global = true} = Ctx, Acc}}) ->
     GlobalAsts = append_asts(Inf#ast_inf.global_asts, Ast),
-    io:format("TRACE ~p:~p ~p~n",[?MODULE, ?LINE, GlobalAsts]),
     {{[], Inf#ast_inf{global_asts = GlobalAsts}}, {Ctx, Acc}};
 maybe_global({AstInf, CtxAcc}) ->    
     {AstInf, CtxAcc}.
