@@ -34,7 +34,9 @@
 -author('rsaccon@gmail.com').
 
 %% API
--export([parse_int/2]).
+-export([
+    parse_int/2,
+    parse_float/1]).
 
 %%====================================================================
 %% API
@@ -47,12 +49,20 @@
 parse_int(Str, 10) ->
     %% TODO: a lot, this is just the most simple case
     try list_to_integer(Str) of
-        Val ->
-            erl_syntax:integer(Val)
+        Val -> Val
     catch
-        error:badarg ->
-            erl_syntax:atom('NaN')
+        error:badarg -> 'NaN'
     end.
+    
+    
+parse_float(Str) ->
+    %% TODO: a lot, this is just the most simple case
+    try list_to_float(Str) of
+        Val -> Val
+    catch
+        error:badarg -> 'NaN'
+    end.
+    
     
 %%====================================================================
 %% Internal functions

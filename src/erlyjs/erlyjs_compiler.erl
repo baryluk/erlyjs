@@ -178,16 +178,18 @@ forms(Checksum, Module, FuncAsts, Info) ->
 
 compile_forms(Forms, Ctx) ->  
     CompileOptions = case Ctx#js_ctx.verbose of
-        true ->
-            io:format("Erlang source:~n~n"),
-            io:put_chars(erl_prettypr:format(erl_syntax:form_list(Forms))),
-            io:format("~n"),
-            [verbose, report_errors, report_warnings];
-        _ ->
-            []
+        true -> [verbose, report_errors, report_warnings];
+        _ -> []
     end,  
     case compile:forms(Forms, CompileOptions) of
-        {ok, Module1, Bin} ->           
+        {ok, Module1, Bin} -> 
+            case Ctx#js_ctx.verbose of
+                true ->
+                    io:format("Erlang source:~n~n"),
+                    io:put_chars(erl_prettypr:format(erl_syntax:form_list(Forms))),
+                    io:format("~n");
+                _ -> ok
+            end,        
             Path = filename:join([Ctx#js_ctx.out_dir, atom_to_list(Module1) ++ ".beam"]),
             case file:write_file(Path, Bin) of
                 ok ->
@@ -223,6 +225,8 @@ ast({identifier, _, false}, {Ctx, Acc}) ->
     {{erl_syntax:atom(false), #ast_inf{}}, {Ctx, Acc}};    
 ast({integer, _, Value}, {Ctx, Acc}) -> 
     {{erl_syntax:integer(Value), #ast_inf{}}, {Ctx, Acc}};
+ast({float, _, Value}, {Ctx, Acc}) -> 
+    {{erl_syntax:float(Value), #ast_inf{}}, {Ctx, Acc}};
 ast({string, _, Value}, {Ctx, Acc}) ->
     {{erl_syntax:string(Value), #ast_inf{}}, {Ctx, Acc}}; %% TODO: binary instead of string 
 ast({{'[', _L},  Value}, {Ctx, Acc}) -> 
@@ -238,7 +242,11 @@ ast({identifier, _, Name}, {Ctx, Acc}) ->
     var_ast(Name, Ctx, Acc);
 
 ast({{identifier, _, Name} , {'(', Args}}, {Ctx, Acc}) ->  
-    global_call(Name, Args, Ctx, Acc);  
+    R=global_call(Name, Args, Ctx, Acc),
+    {{A,I},_} = R,
+    io:format("TRACE ~p:~p >>~p~n",[?MODULE, ?LINE, A]),
+    io:format("TRACE ~p:~p >>>>~p~n",[?MODULE, ?LINE, I#ast_inf.global_asts]),
+    R;  
 ast({{{identifier, _, Name}, MemberList}, {'(', Args}}, {Ctx, Acc}) ->
     %% TODO: needs complete rewrite
     call(Name, MemberList, Args, Ctx, Acc);  
@@ -600,12 +608,24 @@ func(Name, Params, Body, Ctx, Acc) ->
             {{Ast1, Inf}, {Ctx, Acc}}
     end.
 
-
+global_call(parseFloat, [{string, _, Str}], Ctx, Acc) ->
+    Ast = erl_syntax:application(erl_syntax:atom(erlyjs_global_funcs), 
+        erl_syntax:atom(parse_float), [erl_syntax:string(Str)]),
+    maybe_global({{Ast, #ast_inf{}}, {Ctx, Acc}});        
 global_call(parseInt, [{string, _, Str}], Ctx, Acc) ->
-    Ast = erlyjs_global_funcs:parse_int(Str, 10),
+    %% Ast = erlyjs_global_funcs:parse_int(Str, 10),
+    
+    Ast = erl_syntax:application(erl_syntax:atom(erlyjs_global_funcs), 
+        erl_syntax:atom(parse_int), [
+            erl_syntax:string(Str), erl_syntax:integer(10)]),
+    
+    io:format("TRACE ~p:~p ~p~n",[?MODULE, ?LINE, Ast]),
     maybe_global({{Ast, #ast_inf{}}, {Ctx, Acc}});
 global_call(parseInt, [{string, _, Str},{integer, _, Radix}], Ctx, Acc) ->
-    Ast = erlyjs_global_funcs:parse_int(Str, Radix),
+    %% Ast = erlyjs_global_funcs:parse_int(Str, Radix),
+    Ast = erl_syntax:application(erl_syntax:atom(erlyjs_global_funcs), 
+        erl_syntax:atom(parse_int), [
+            erl_syntax:string(Str), erl_syntax:integer(Radix)]),
     maybe_global({{Ast, #ast_inf{}}, {Ctx, Acc}});  
 global_call(Name, _, _, _) ->
     throw({error, lists:concat(["No such global function: ", Name])}).

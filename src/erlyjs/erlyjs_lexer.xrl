@@ -38,27 +38,27 @@
 Definitions.
 
 Digit = [0-9]
-UPPERCASE = [A-Z]
-LOWERCASE = [a-z]
-UNDERSCORE = [_]
-WHITESPACE = [\000-\s]
+Uppercase = [A-Z]
+Lowercase = [a-z]
+Underscore = [_]
+Whitespace = [\000-\s]
 
-STRING = "(\\\^.|\\.|[^"])*"
-QUOTE = '(\\\^.|\\.|[^'])*'
-COMMENT = (/\*(.|[\r\n])*?\*/|//.*)
+String = "(\\\^.|\\.|[^"])*"
+Quote = '(\\\^.|\\.|[^'])*'
+Comment = (/\*(.|[\r\n])*?\*/|//.*)
 
 
 Rules.   
 
-(-{Digit}+|{Digit}+) : build_integer(TokenChars, TokenLine).
+(\+|\-)?{Digit}+\.{Digit}+ : build_float(TokenChars, TokenLine).
 
-(-{Digi}+\.{Dgit}+|{Digi}+\.{Dgit}+) : build_float(TokenChars, TokenLine).
+(\+|\-)?{Digit}+ : build_integer(TokenChars, TokenLine).
 
-{STRING} : build_string(TokenChars, TokenLine, TokenLen).
+{String} : build_string(TokenChars, TokenLine, TokenLen).
 
-{QUOTE} : build_string(TokenChars, TokenLine, TokenLen).
+{Quote} : build_string(TokenChars, TokenLine, TokenLen).
 
-{COMMENT} : skip_token.       
+{Comment} : skip_token.     
 
 %% TODO: fix build_identifier
 %% Variables: first: letter, underscore (_), or dollar sign ($)
@@ -69,9 +69,9 @@ Rules.
 %% ({Small}({Small}|{Big}|{Dig}|_)*) : {token, {atom,YYline, YYtext}}.
 %% ({Big}({Small} | {Big}|{Dig} | _)*) : {token, special(YYtext, YYline)}
 
-({LOWERCASE}|{UPPERCASE}|{UNDERSCORE})* : build_identifier(TokenChars, TokenLine).  %% TOOO: needs to be fixed
+({Uppercase}|{Lowercase}|{Underscore})* : build_identifier(TokenChars, TokenLine).  %% TOOO: needs to be fixed
 
-{WHITESPACE}+ : skip_token.
+{Whitespace}+ : skip_token.
 
 
 %% special characters and single character operators
@@ -140,7 +140,7 @@ build_integer(Chars, Line) ->
     {token, {integer, Line, list_to_integer(Chars)}}.
 
 build_float(Chars, Line) ->
-    {token, {float, Line,list_to_float(Chars)}}.
+    {token, {float, Line, list_to_float(Chars)}}.
 
 build_string(Chars, Line, Len) ->
     S = lists:sublist(Chars, 2, Len - 2), 

@@ -1,6 +1,6 @@
 // Mandatory. Provide here a description of the test case.
 function test_description() {
-    return "Global function 'parseInt'";
+    return "Global function 'parseFloat'";
 }
 
 // Mandatory. Provide here the arguments the testsuite will use 
@@ -11,7 +11,7 @@ function test_args() {
 
 // Mandatory. Provide here the expected test result. 
 function test_ok() {
-    return NaN;
+    return 15.6;
 }
 
 // Optional. Provide here any global code.
@@ -23,7 +23,7 @@ function test_ok() {
 function test() {
     var a;
     
-    a = parseInt("foo15");
+    a = parseFloat("15.6");
     
     return a;
 }
