@@ -71,8 +71,29 @@ encodeURIComponent(_Str) ->
     exit(not_implemented_yet).
 
 
-eval(_Str) ->
-    exit(not_implemented_yet).
+eval(Str) when is_list(Str) ->
+    case erlyjs_compiler:parse(Str) of
+        {ok, JsParseTree} -> 
+            try erlyjs_compiler:parse_transform(JsParseTree) of
+                {ErlAstList, Info, _} ->    
+                    L = [erl_syntax:revert(X) || X <- ErlAstList],             
+                    NewBindings = erl_eval:new_bindings(),
+                    case  erl_eval:exprs(L, erl_eval:new_bindings()) of
+                        {value, Value, _Bindings} ->
+                            Value;
+                        Err ->
+                            io:format("TRACE ~p:~p ~p~n",[?MODULE, ?LINE, Err])
+                    end;
+                Err ->
+                    io:format("TRACE ~p:~p ~p~n",[?MODULE, ?LINE, Err])                                                     
+            catch 
+                throw:Error ->
+                    io:format("TRACE ~p:~p ~p~n",[?MODULE, ?LINE, Error]),
+                    Error
+            end;
+        Err ->
+            io:format("TRACE ~p:~p ~p~n",[?MODULE, ?LINE, Err])
+    end.
     
     
 %% TODO: check for positive infinity or negative infinity

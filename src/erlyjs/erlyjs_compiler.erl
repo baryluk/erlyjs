@@ -32,12 +32,12 @@
 -author('rsaccon@gmail.com').
 
 %% API
--export([compile/2, compile/3]).
+-export([parse/1, parse_transform/1, compile/2, compile/3]).
 
 
 -record(js_ctx, {
     out_dir = "ebin",
-    global = true,   
+    top_lev_global = false,   
     args = [],
     api_namespace = [],
     reader = {file, read_file},
@@ -77,7 +77,7 @@ compile(File, Module, Options) ->
                     ok;
                 {ok, JsParseTree} ->
                     trace(?MODULE, ?LINE, "JsParseTree", JsParseTree, Ctx),
-                    try body_ast(JsParseTree, Ctx, #tree_acc{}) of
+                    try parse_transform(JsParseTree, Ctx, #tree_acc{}) of
                         {AstList, Info, _} ->                
                             Forms = forms(CheckSum, Module, AstList, Info),  
                             trace(?MODULE, ?LINE, "Forms", Forms, Ctx),                            
@@ -94,6 +94,21 @@ compile(File, Module, Options) ->
     end.
   		
 	
+parse(Data) when is_binary(Data) ->
+    parse(binary_to_list(Data));
+parse(Data) ->
+    case erlyjs_lexer:string(Data) of
+        {ok, Tokens, _} ->
+            erlyjs_parser:parse(Tokens);
+        Err ->
+            Err
+    end.
+
+    
+parse_transform(JsParseTree) ->
+    parse_transform(JsParseTree, #js_ctx{}, #tree_acc{}).
+    
+	
 %%====================================================================
 %% Internal functions
 %%====================================================================    
@@ -101,22 +116,14 @@ compile(File, Module, Options) ->
 init_js_ctx(_File, Module, Options) ->
     Ctx = #js_ctx{},
     #js_ctx{ 
+        top_lev_global = true,
         module = list_to_atom(Module),
         out_dir = proplists:get_value(out_dir, Options,  Ctx#js_ctx.out_dir),
         verbose = proplists:get_value(verbose, Options, Ctx#js_ctx.verbose),
         reader = proplists:get_value(reader, Options, Ctx#js_ctx.reader),
         force_recompile = proplists:get_value(force_recompile, Options, Ctx#js_ctx.force_recompile)}.
       
-        
-parse(Data) ->
-    case erlyjs_lexer:string(binary_to_list(Data)) of
-        {ok, Tokens, _} ->
-            erlyjs_parser:parse(Tokens);
-        Err ->
-            Err
-    end.
-        
-
+      
 parse(_, Data, #js_ctx{force_recompile = true}) ->  
     parse(Data);
 parse(CheckSum, Data, Ctx) ->
@@ -207,7 +214,7 @@ compile_forms(Forms, Ctx) ->
     end.
     
   
-body_ast(JsParseTree, Ctx, Acc) when is_list(JsParseTree) ->
+parse_transform(JsParseTree, Ctx, Acc) when is_list(JsParseTree) ->
     {AstInfList, {_, Acc1}} = lists:mapfoldl(fun ast/2, {Ctx, Acc}, JsParseTree),  
     {AstList, Inf} = lists:mapfoldl(
         fun
@@ -215,7 +222,7 @@ body_ast(JsParseTree, Ctx, Acc) when is_list(JsParseTree) ->
                 {XAst, append_info(XInf, InfAcc)}
         end, #ast_inf{}, AstInfList),
     {lists:flatten(AstList), Inf, Acc1};
-body_ast(JsParseTree, Ctx, Acc) ->
+parse_transform(JsParseTree, Ctx, Acc) ->
     {{Ast, Inf}, {_, Acc1}} = ast(JsParseTree, {Ctx, Acc}),
     {Ast, Inf, Acc1}.
 
@@ -248,7 +255,7 @@ ast({{{identifier, _, Name}, Names}, {'(', Args}}, {Ctx, Acc}) ->
 ast({{identifier, _, Name}, Value}, {Ctx, Acc}) -> 
     var_declare(Name, Value, Ctx, Acc);  
 ast({var, DeclarationList}, {Ctx, Acc}) ->
-    {Ast, Info, Acc1} = body_ast(DeclarationList, Ctx#js_ctx{action = set}, Acc),
+    {Ast, Info, Acc1} = parse_transform(DeclarationList, Ctx#js_ctx{action = set}, Acc),
     {{Ast, Info}, {Ctx, Acc1}};
 ast(return, {Ctx, Acc}) -> 
     %% TODO: eliminate this clause by adjusting the grammar
@@ -259,44 +266,44 @@ ast({return, Expression}, {Ctx, Acc}) ->
 ast({function, {identifier, _L2, Name}, {params, Params, body, Body}}, {Ctx, Acc}) ->
     func(Name, Params, Body, Ctx, Acc);   
 ast({op, {Op, _}, In}, {Ctx, Acc}) ->
-    {Out, _, #tree_acc{names_set = Set}} = body_ast(In, Ctx, Acc),
+    {Out, _, #tree_acc{names_set = Set}} = parse_transform(In, Ctx, Acc),
     {{erlyjs_operators:ast(Op, Out), #ast_inf{}}, {Ctx, Acc#tree_acc{names_set = Set}}};
 ast({op, {Op, _}, In1, In2}, {Ctx, Acc}) ->
-    {Out1, _, #tree_acc{names_set = Set1}} = body_ast(In1, Ctx, Acc),
-    {Out2, _, #tree_acc{names_set = Set2}} = body_ast(In2, Ctx, Acc#tree_acc{names_set = Set1}),
+    {Out1, _, #tree_acc{names_set = Set1}} = parse_transform(In1, Ctx, Acc),
+    {Out2, _, #tree_acc{names_set = Set2}} = parse_transform(In2, Ctx, Acc#tree_acc{names_set = Set1}),
     {{erlyjs_operators:ast(Op, Out1, Out2), #ast_inf{}}, {Ctx, Acc#tree_acc{names_set = Set2}}};
 ast({op, {{Op, postfix}, _}, In1, In2}, {Ctx, Acc}) ->
     %% TODO: fix this, code below is prefix operator
-    {Out1, _, #tree_acc{names_set = Set1}} = body_ast(In1, Ctx, Acc),
-    {Out2, _, #tree_acc{names_set = Set2}} = body_ast(In2, Ctx, Acc#tree_acc{names_set = Set1}),
+    {Out1, _, #tree_acc{names_set = Set1}} = parse_transform(In1, Ctx, Acc),
+    {Out2, _, #tree_acc{names_set = Set2}} = parse_transform(In2, Ctx, Acc#tree_acc{names_set = Set1}),
     {{erlyjs_operators:ast(Op, Out1, Out2), #ast_inf{}}, {Ctx, Acc#tree_acc{names_set = Set2}}};
 ast({op, Op, In1, In2, In3}, {Ctx, Acc}) ->
-    {Out1, _, #tree_acc{names_set = Set1}} = body_ast(In1, Ctx, Acc),
-    {Out2, _, #tree_acc{names_set = Set2}} = body_ast(In2, Ctx, Acc#tree_acc{names_set = Set1}),
-    {Out3, _, #tree_acc{names_set = Set3}} = body_ast(In3, Ctx, Acc#tree_acc{names_set = Set2}),
+    {Out1, _, #tree_acc{names_set = Set1}} = parse_transform(In1, Ctx, Acc),
+    {Out2, _, #tree_acc{names_set = Set2}} = parse_transform(In2, Ctx, Acc#tree_acc{names_set = Set1}),
+    {Out3, _, #tree_acc{names_set = Set3}} = parse_transform(In3, Ctx, Acc#tree_acc{names_set = Set2}),
     {{erlyjs_operators:ast(Op, Out1, Out2, Out3), #ast_inf{}}, {Ctx, Acc#tree_acc{names_set = Set3}}}; 
 ast({assign, {'=', _}, {identifier, _, Name}, In1}, {Ctx, Acc}) ->  
     {{Out2, _}, {_, Acc1}} = var_ast(Name, Ctx#js_ctx{action = set}, Acc),  
-    {Out3, Inf, _} = body_ast(In1, Ctx, Acc),  
+    {Out3, Inf, _} = parse_transform(In1, Ctx, Acc),  
     assign_ast('=', Name, Out2, Out3, Inf, Ctx, Acc1);
 ast({assign, {Op, _}, {identifier, _, Name}, In1}, {Ctx, Acc}) ->  
     {{Out2, _}, _} = var_ast(Name, Ctx, Acc),  
-    {Out3, Inf, Acc1} = body_ast(In1, Ctx, Acc),    
+    {Out3, Inf, Acc1} = parse_transform(In1, Ctx, Acc),    
     {{Out4, _}, {_, Acc2}} = var_ast(Name, Ctx#js_ctx{action = set}, Acc1), 
     assign_ast('=', Name, Out4, erlyjs_operators:ast(assign_to_op(Op), Out2, Out3), Inf, Ctx, Acc2);  
-ast({'if', Cond, If}, {#js_ctx{global = true} = Ctx, Acc}) -> 
-    {OutCond, _, #tree_acc{names_set = Set}} = body_ast(Cond, Ctx, Acc),
+ast({'if', Cond, If}, {#js_ctx{top_lev_global = true} = Ctx, Acc}) -> 
+    {OutCond, _, #tree_acc{names_set = Set}} = parse_transform(Cond, Ctx, Acc),
     Acc2 = Acc#tree_acc{names_set = Set, var_pairs = push_var_pairs(Acc)},
-    {_, Inf, Acc3} = body_ast(If, Ctx, Acc2),
+    {_, Inf, Acc3} = parse_transform(If, Ctx, Acc2),
     ReturnVarsElse = get_vars_init(Acc, Acc3, Ctx),                                        
     Ast = erl_syntax:case_expr(OutCond, [
         erl_syntax:clause([erl_syntax:atom(true)], none, Inf#ast_inf.global_asts),
         erl_syntax:clause([erl_syntax:underscore()], none, [ReturnVarsElse])]),
     {{[], #ast_inf{global_asts = [Ast]}}, {Ctx, pop_var_pairs(Acc3)}};    
 ast({'if', Cond, If}, {Ctx, Acc}) -> 
-    {OutCond, _, #tree_acc{names_set = Set}} = body_ast(Cond, Ctx, Acc),
+    {OutCond, _, #tree_acc{names_set = Set}} = parse_transform(Cond, Ctx, Acc),
     Acc2 = Acc#tree_acc{names_set = Set, var_pairs = push_var_pairs(Acc)},
-    {OutIf, _, Acc3} = body_ast(If, Ctx, Acc2),
+    {OutIf, _, Acc3} = parse_transform(If, Ctx, Acc2),
     ReturnVarsIf = get_vars_snapshot(Acc3),    
     ReturnVarsElse = get_vars_init(Acc, Acc3, Ctx),
     {Vars, Acc4} =  get_vars_result(Acc3, Acc3, Ctx),                                         
@@ -307,11 +314,11 @@ ast({'if', Cond, If}, {Ctx, Acc}) ->
     {{Ast2, #ast_inf{}}, {Ctx, pop_var_pairs(Acc4)}};
 ast({'if', Cond, If, Else}, {Ctx, Acc}) -> 
     %% TODO: refactor and handle global scope
-    {OutCond, _, #tree_acc{names_set = Set}} = body_ast(Cond, Ctx, Acc),
+    {OutCond, _, #tree_acc{names_set = Set}} = parse_transform(Cond, Ctx, Acc),
     AccOutIfIn = Acc#tree_acc{names_set = Set, var_pairs = push_var_pairs(Acc)},
-    {OutIf, _, #tree_acc{names_set = Set1} = Acc1} = body_ast(If, Ctx, AccOutIfIn), 
+    {OutIf, _, #tree_acc{names_set = Set1} = Acc1} = parse_transform(If, Ctx, AccOutIfIn), 
     AccOutElseIn = Acc#tree_acc{names_set = Set1, var_pairs = [dict:new() | Acc#tree_acc.var_pairs]},
-    {OutElse, _, Acc2} = body_ast(Else, Ctx, AccOutElseIn),
+    {OutElse, _, Acc2} = parse_transform(Else, Ctx, AccOutElseIn),
     KeyList = lists:usort([ Key || {Key, _} <- lists:append([
         dict:to_list(hd(Acc1#tree_acc.var_pairs)), 
         dict:to_list(hd(Acc2#tree_acc.var_pairs))])]),
@@ -352,12 +359,12 @@ ast({'if', Cond, If, Else}, {Ctx, Acc}) ->
         erl_syntax:clause([erl_syntax:underscore()], none, append_asts(OutElse, ReturnVarsElse))]),
     Ast2 = erl_syntax:match_expr(erl_syntax:tuple(Vars), Ast),
     {{Ast2, #ast_inf{}}, {Ctx, pop_var_pairs(Acc3)}};    
-ast({do_while, Stmt, Cond}, {#js_ctx{global = true} = Ctx, Acc}) ->   
+ast({do_while, Stmt, Cond}, {#js_ctx{top_lev_global = true} = Ctx, Acc}) ->   
     Acc2 = Acc#tree_acc{
         var_pairs = push_var_pairs(Acc),
         func_counter = inc_func_counter(Acc)},   
-    {_, Inf, Acc3} = body_ast(Stmt, Ctx, Acc2),   
-    {OutCond, _, Acc4} = body_ast(Cond, Ctx, Acc3),
+    {_, Inf, Acc3} = parse_transform(Stmt, Ctx, Acc2),   
+    {OutCond, _, Acc4} = parse_transform(Cond, Ctx, Acc3),
     AstFuncCond = erl_syntax:case_expr(OutCond, [
         erl_syntax:clause([erl_syntax:atom(true)], none,
             [erl_syntax:application(none, func_name(Acc2), [])]),
@@ -371,8 +378,8 @@ ast({do_while, Stmt, Cond}, {Ctx, Acc}) ->
     Acc2 = Acc#tree_acc{
         var_pairs = push_var_pairs(Acc),
         func_counter = inc_func_counter(Acc)},   
-    {OutStmt, _, Acc3} = body_ast(Stmt, Ctx, Acc2),   
-    {OutCond, _, Acc4} = body_ast(Cond, Ctx, Acc3),
+    {OutStmt, _, Acc3} = parse_transform(Stmt, Ctx, Acc2),   
+    {OutCond, _, Acc4} = parse_transform(Cond, Ctx, Acc3),
     VarsBefore = get_vars_init(Acc, Acc3, Ctx),
     VarsAfterStmt = get_vars_snapshot(Acc3),
     {VarsAfter, Acc5} = get_vars_result(Acc3, Acc4, Ctx),    
@@ -386,13 +393,13 @@ ast({do_while, Stmt, Cond}, {Ctx, Acc}) ->
     Ast = erl_syntax:match_expr(VarsAfter, 
         erl_syntax:application(none, func_name(Acc2), [VarsBefore])),  
     {{[Ast], #ast_inf{internal_func_asts = [Func]}}, {Ctx, pop_var_pairs(Acc5)}};       
-ast({while, Cond, Stmt}, {#js_ctx{global = true} = Ctx, Acc}) ->
-    {OutCond, _, #tree_acc{names_set = Set}} = body_ast(Cond, Ctx, Acc),
+ast({while, Cond, Stmt}, {#js_ctx{top_lev_global = true} = Ctx, Acc}) ->
+    {OutCond, _, #tree_acc{names_set = Set}} = parse_transform(Cond, Ctx, Acc),
     Acc2 = Acc#tree_acc{
         names_set = Set, 
         var_pairs = push_var_pairs(Acc),
         func_counter = inc_func_counter(Acc)},
-    {_, Inf, Acc3} = body_ast(Stmt, Ctx, Acc2),
+    {_, Inf, Acc3} = parse_transform(Stmt, Ctx, Acc2),
     AstFuncCond = erl_syntax:case_expr(OutCond, [
         erl_syntax:clause([erl_syntax:atom(true)], none,
             append_asts(Inf#ast_inf.global_asts, erl_syntax:application(none, func_name(Acc3), []))),
@@ -403,12 +410,12 @@ ast({while, Cond, Stmt}, {#js_ctx{global = true} = Ctx, Acc}) ->
     Ast = erl_syntax:application(none, func_name(Acc3), []),        
     {{[], #ast_inf{internal_func_asts = [Func], global_asts = [Ast]}}, {Ctx, pop_var_pairs(Acc3)}};      
 ast({while, Cond, Stmt}, {Ctx, Acc}) ->
-    {OutCond, _, #tree_acc{names_set = Set}} = body_ast(Cond, Ctx, Acc),
+    {OutCond, _, #tree_acc{names_set = Set}} = parse_transform(Cond, Ctx, Acc),
     Acc2 = Acc#tree_acc{
         names_set = Set, 
         var_pairs = push_var_pairs(Acc),
         func_counter = inc_func_counter(Acc)},
-    {OutStmt, _, Acc3} = body_ast(Stmt, Ctx, Acc2),
+    {OutStmt, _, Acc3} = parse_transform(Stmt, Ctx, Acc2),
     VarsBefore = get_vars_init(Acc, Acc3, Ctx),
     VarsAfterStmt = get_vars_snapshot(Acc3),
     {VarsAfter, Acc4} = get_vars_result(Acc3, Acc3, Ctx),    
@@ -424,13 +431,13 @@ ast({while, Cond, Stmt}, {Ctx, Acc}) ->
     {{[Ast], #ast_inf{internal_func_asts = [Func]}}, {Ctx, pop_var_pairs(Acc4)}}; 
 ast({for, Init, Cond, Final, Stmt}, {Ctx, Acc}) -> 
     %% TODO: refactor and handle global scope
-    {OutInit, _, Acc2} = body_ast(Init, Ctx, Acc),
+    {OutInit, _, Acc2} = parse_transform(Init, Ctx, Acc),
     Acc3 = Acc2#tree_acc{
         var_pairs = push_var_pairs(Acc),
         func_counter = inc_func_counter(Acc)},
-    {OutCond, _, Acc4} = body_ast(Cond, Ctx, Acc3),
-    {OutStmt, _, Acc5} = body_ast(Stmt, Ctx, Acc4),                
-    {FinalExpr, _, Acc6} = body_ast(Final, Ctx, Acc5),
+    {OutCond, _, Acc4} = parse_transform(Cond, Ctx, Acc3),
+    {OutStmt, _, Acc5} = parse_transform(Stmt, Ctx, Acc4),                
+    {FinalExpr, _, Acc6} = parse_transform(Final, Ctx, Acc5),
     VarsBefore = get_vars_init(Acc2, Acc6, Ctx),
     VarsAfterStmt = get_vars_snapshot(Acc6),
     {VarsAfter, Acc7} = get_vars_result(Acc6, Acc6, Ctx),
@@ -522,7 +529,7 @@ var_declare(Key, {identifier, _, 'NaN'}, Ctx,  #tree_acc{js_scopes = [_]}=Acc) -
 var_declare(Key, Value, Ctx,  #tree_acc{js_scopes = [GlobalScope]}=Acc) ->      
     Dict = dict:store(Key, prefix_name(Key), GlobalScope#scope.names_dict),
     Acc2 = Acc#tree_acc{js_scopes=[#scope{names_dict = Dict}]},
-    {ValueAst, Inf, Acc2} = body_ast(Value, Ctx, Acc2),
+    {ValueAst, Inf, Acc2} = parse_transform(Value, Ctx, Acc2),
     Args = [erl_syntax:atom(prefix_name(Key)), ValueAst], 
     Ast = erl_syntax:application(none, erl_syntax:atom(put), Args), 
     Asts = [Ast | Inf#ast_inf.global_asts],
@@ -542,7 +549,7 @@ var_declare(Key, {identifier, _, 'NaN'}, Ctx, Acc) ->
     {{erl_syntax:match_expr(AstVar, erl_syntax:atom('NaN')), Inf}, {Ctx, Acc2}};                        
 var_declare(Key, Value, Ctx, Acc) ->
     {{AstVariable, _}, {_, Acc2}}  = var_ast(Key, Ctx, Acc),
-    {AstValue, Info, Acc3} = body_ast(Value, Ctx, Acc2),
+    {AstValue, Info, Acc3} = parse_transform(Value, Ctx, Acc2),
     Ast = erl_syntax:match_expr(AstVariable, AstValue),  
     {{Ast, Info}, {Ctx, Acc3}}.
     
@@ -616,11 +623,11 @@ get_vars_result(Acc, AccSet, Ctx) ->
             
                        
 func(Name, Params, Body, Ctx, Acc) -> 
-    {Params1, _, _} = body_ast(Params, Ctx, Acc),          
-    {Ast, Inf, _} = body_ast(Body, Ctx#js_ctx{global = false}, push_scope(Acc)),
+    {Params1, _, _} = parse_transform(Params, Ctx, Acc),          
+    {Ast, Inf, _} = parse_transform(Body, Ctx#js_ctx{top_lev_global = false}, push_scope(Acc)),
     Ast1 = erl_syntax:function(erl_syntax:atom(prefix_name(Name)),
         [erl_syntax:clause(Params1, none, Ast)]),
-    case Ctx#js_ctx.global of
+    case Ctx#js_ctx.top_lev_global of
         true->
             Export = erl_syntax:arity_qualifier(erl_syntax:atom(prefix_name(Name)), 
                 erl_syntax:integer(length(Params))),
@@ -635,7 +642,7 @@ call(Name, Args, Ctx, Acc) ->
     Arity = length(Args),
     case native_global_func(Name, Arity) of
         ok ->     
-            {Args2, _, Acc2} = body_ast(Args, Ctx, Acc),  
+            {Args2, _, Acc2} = parse_transform(Args, Ctx, Acc),  
             Ast = erl_syntax:application(erl_syntax:atom(erlyjs_global_funcs), 
                 erl_syntax:atom(Name), Args2),
             {{Ast, #ast_inf{}}, {Ctx, Acc2}};
@@ -649,7 +656,7 @@ call(Name, Names, Args, Ctx, Acc) ->
     Arity = length(Args),
     case api_func(Name, Names, Arity) of
         {Module, Function} ->
-            {Args1, _, Acc1} = body_ast(Args, Ctx, Acc),    
+            {Args1, _, Acc1} = parse_transform(Args, Ctx, Acc),    
             Ast = erl_syntax:application(erl_syntax:atom(Module), erl_syntax:atom(Function), Args1),
             maybe_global({{Ast, #ast_inf{}}, {Ctx, Acc1}});
         _ ->
@@ -675,7 +682,7 @@ api_func(_, _, _) -> false.
 build_api_func(Name, Func) -> {lists:concat(["erlyjs_api_", Name]), Func}.
    
  
-assign_ast('=', Name, _, Ast2, Inf, #js_ctx{global = true} = Ctx, Acc) ->
+assign_ast('=', Name, _, Ast2, Inf, #js_ctx{top_lev_global = true} = Ctx, Acc) ->
     %% TODO: dynamic typechecking
     Ast = erl_syntax:application(none, erl_syntax:atom(put), [
         erl_syntax:atom(prefix_name(Name)), Ast2]),
@@ -689,7 +696,7 @@ assign_ast(Unknown, _, _, _, _, _, _) ->
     throw({error, lists:concat(["Unknown assignment operator: ", Unknown])}).        
 
 
-maybe_global({{Ast, Inf}, {#js_ctx{global = true} = Ctx, Acc}}) ->
+maybe_global({{Ast, Inf}, {#js_ctx{top_lev_global = true} = Ctx, Acc}}) ->
     GlobalAsts = append_asts(Inf#ast_inf.global_asts, Ast),
     {{[], Inf#ast_inf{global_asts = GlobalAsts}}, {Ctx, Acc}};
 maybe_global({AstInf, CtxAcc}) ->    
