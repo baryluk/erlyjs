@@ -198,10 +198,10 @@ ArgumentList -> AssignmentExpression : ['$1'].
 ArgumentList -> ArgumentList ',' AssignmentExpression : '$1' ++ ['$3'].
 
 
-%% Postfix Operators % TODO
+%% Postfix Operators
 PostfixExpression -> LeftSideExpression : '$1'.
-PostfixExpression -> LeftSideExpression '++' : '$1'. 
-PostfixExpression -> LeftSideExpression '--' : '$1'.
+PostfixExpression -> LeftSideExpression '++' : {op, postfix('$1'), '$2'}.
+PostfixExpression -> LeftSideExpression '--' : {op, postfix('$1'), '$2'}.
 
 %% Unary Operators
 UnaryExpression -> PostfixExpression : '$1'.
@@ -284,8 +284,10 @@ CompoundAssignment -> '^=' : '$1'.
 CompoundAssignment -> '|=' : '$1'. 
 
 %% Expressions 
-Expression -> AssignmentExpression : '$1'.
-Expression -> Expression ',' AssignmentExpression : ['$1', '$3']. 
+%% Expression -> AssignmentExpression : ['$1'].                             % not working
+%% Expression -> Expression ',' AssignmentExpression : '$1' ++ ['$3'].      % not working
+Expression -> AssignmentExpression : '$1'.                                  % ok, but shouldn't
+Expression -> Expression ',' AssignmentExpression : ['$1', '$3'].           % ????????????????? 
 OptionalExpression -> Expression : '$1'.
 OptionalExpression -> '$empty' : [].
 
@@ -355,11 +357,11 @@ DoStatement -> do Statement while ParenthesizedExpression : {do_while, '$2', '$4
 WhileStatement -> while ParenthesizedExpression Statement : {while, '$2', '$3'}.
 
 %% For Statements  TODO
-ForStatement -> for '(' ForInitializer ';' OptionalExpression ';' OptionalExpression ')' Statement : '$1'.
-ForStatement -> for '(' ForInBinding in Expression ')' Statement : '$1'.
+ForStatement -> for '(' ForInitializer ';' OptionalExpression ';' OptionalExpression ')' Statement : {for, '$3', '$5', '$7', '$9'}.
+ForStatement -> for '(' ForInBinding in Expression ')' Statement : '$1'. %% TODO
 ForInitializer -> '$empty' : [].
 ForInitializer -> Expression : '$1'.
-ForInitializer -> var VariableDeclarationList : '$1'.  %% TODO
+ForInitializer -> var VariableDeclarationList : {var, '$2'}.
 ForInBinding -> LeftSideExpression : '$1'.
 ForInBinding -> var VariableDeclaration : '$1'.  %% TODO
 
@@ -406,8 +408,8 @@ TopStatement -> FunctionDefinition  : '$1'.
 
 Erlang code.
 
-first_el({First, _}) ->
-    First.
+postfix({Op, Line}) -> {{Op, postfix}, Line}.
     
-list_third_el(L) ->
-    [X || {identifier, _ , X} <- L].
+first_el({First, _}) -> First.
+    
+list_third_el(L) ->  [X || {identifier, _ , X} <- L].

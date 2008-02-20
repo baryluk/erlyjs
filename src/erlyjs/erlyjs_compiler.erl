@@ -83,7 +83,8 @@ compile(File, Module, Options) ->
                             trace(?MODULE, ?LINE, "Forms", Forms, Ctx),                            
                             compile_forms(Forms, Ctx)                                      
                     catch 
-                        throw:Error -> Error
+                        throw:Error ->
+                            Error
                     end;
                 Error ->
                     Error
@@ -264,6 +265,11 @@ ast({op, {Op, _}, In1, In2}, {Ctx, Acc}) ->
     {Out1, _, #tree_acc{names_set = Set1}} = body_ast(In1, Ctx, Acc),
     {Out2, _, #tree_acc{names_set = Set2}} = body_ast(In2, Ctx, Acc#tree_acc{names_set = Set1}),
     {{erlyjs_operators:ast(Op, Out1, Out2), #ast_inf{}}, {Ctx, Acc#tree_acc{names_set = Set2}}};
+ast({op, {{Op, postfix}, _}, In1, In2}, {Ctx, Acc}) ->
+    %% TODO: fix this, code below is prefix operator
+    {Out1, _, #tree_acc{names_set = Set1}} = body_ast(In1, Ctx, Acc),
+    {Out2, _, #tree_acc{names_set = Set2}} = body_ast(In2, Ctx, Acc#tree_acc{names_set = Set1}),
+    {{erlyjs_operators:ast(Op, Out1, Out2), #ast_inf{}}, {Ctx, Acc#tree_acc{names_set = Set2}}};
 ast({op, Op, In1, In2, In3}, {Ctx, Acc}) ->
     {Out1, _, #tree_acc{names_set = Set1}} = body_ast(In1, Ctx, Acc),
     {Out2, _, #tree_acc{names_set = Set2}} = body_ast(In2, Ctx, Acc#tree_acc{names_set = Set1}),
@@ -416,6 +422,29 @@ ast({while, Cond, Stmt}, {Ctx, Acc}) ->
     Ast = erl_syntax:match_expr(VarsAfter, 
         erl_syntax:application(none, func_name(Acc3), [VarsBefore])),           
     {{[Ast], #ast_inf{internal_func_asts = [Func]}}, {Ctx, pop_var_pairs(Acc4)}}; 
+ast({for, Init, Cond, Final, Stmt}, {Ctx, Acc}) -> 
+    %% TODO: refactor and handle global scope
+    {OutInit, _, Acc2} = body_ast(Init, Ctx, Acc),
+    Acc3 = Acc2#tree_acc{
+        var_pairs = push_var_pairs(Acc),
+        func_counter = inc_func_counter(Acc)},
+    {OutCond, _, Acc4} = body_ast(Cond, Ctx, Acc3),
+    {OutStmt, _, Acc5} = body_ast(Stmt, Ctx, Acc4),                
+    {FinalExpr, _, Acc6} = body_ast(Final, Ctx, Acc5),
+    VarsBefore = get_vars_init(Acc2, Acc6, Ctx),
+    VarsAfterStmt = get_vars_snapshot(Acc6),
+    {VarsAfter, Acc7} = get_vars_result(Acc6, Acc6, Ctx),
+    Stmts = append_asts(OutStmt, FinalExpr), %%% only works with full assignment expression as FinalExpr
+    AstFuncCond = erl_syntax:case_expr(OutCond, [
+        erl_syntax:clause([erl_syntax:atom(true)], none,
+            append_asts(Stmts, erl_syntax:application(none, func_name(Acc5), [VarsAfterStmt]))),
+        erl_syntax:clause([erl_syntax:underscore()], none,  
+            [VarsBefore])]),
+    Func = erl_syntax:function(func_name(Acc5),
+        [erl_syntax:clause([VarsBefore], none, [AstFuncCond])]),
+    Ast = erl_syntax:match_expr(VarsAfter, 
+        erl_syntax:application(none, func_name(Acc6), [VarsBefore])),    
+    {{[OutInit, Ast], #ast_inf{internal_func_asts = [Func]}}, {Ctx, pop_var_pairs(Acc7)}}; 
 ast(Unknown, _) ->
     throw({error, lists:concat(["Unknown token: ", Unknown])}). 
     
@@ -436,15 +465,15 @@ func_name(Acc) ->
 %%     {erl_syntax:variable(ErlName), Acc2}.
     
       
-var_ast(JsName, #js_ctx{action = set} = Ctx, Acc) ->
+var_ast(Key, #js_ctx{action = set} = Ctx, Acc) ->
     Scope = hd(Acc#tree_acc.js_scopes),
     ErlName = erl_syntax_lib:new_variable_name(Acc#tree_acc.names_set), 
-    Dict = dict:store(JsName, ErlName, Scope#scope.names_dict),
+    Dict = dict:store(Key, ErlName, Scope#scope.names_dict),
     VarPairs = case Acc#tree_acc.var_pairs of
         [] ->
             [];
         Val ->
-            [dict:store(JsName, ErlName, hd(Val)) | tl(Val)]
+            [dict:store(Key, ErlName, hd(Val)) | tl(Val)]
     end,
     Acc1 = Acc#tree_acc{names_set = sets:add_element(ErlName, Acc#tree_acc.names_set), 
         js_scopes = [#scope{names_dict = Dict} | tl(Acc#tree_acc.js_scopes)],
@@ -457,10 +486,10 @@ var_ast('Infinity', #js_ctx{action = get} = Ctx, Acc) ->
     {{erl_syntax:atom('Infinity'), #ast_inf{}}, {Ctx, Acc}};
 var_ast('NaN', #js_ctx{action = get} = Ctx, Acc) ->
     {{erl_syntax:atom('NaN'), #ast_inf{}}, {Ctx, Acc}};        
-var_ast(JsName, #js_ctx{action = get} = Ctx, Acc) ->
-    case name_search(JsName, Acc#tree_acc.js_scopes, []) of
+var_ast(Key, #js_ctx{action = get} = Ctx, Acc) ->
+    case name_search(Key, Acc#tree_acc.js_scopes, []) of
         not_found ->
-            throw({error, lists:concat(["ReferenceError: ", JsName, " is not defined"])});
+            throw({error, lists:concat(["ReferenceError: ", Key, " is not defined"])});
         {global, Name} ->
             Args = [erl_syntax:atom(Name)], 
             Ast = erl_syntax:application(none, erl_syntax:atom(get), Args),
@@ -469,50 +498,50 @@ var_ast(JsName, #js_ctx{action = get} = Ctx, Acc) ->
             {{erl_syntax:variable(Name), #ast_inf{}}, {Ctx, Acc}}
     end.
 
-var_declare(Name, [], Ctx, #tree_acc{js_scopes = [GlobalScope]}=Acc) ->      
-    Dict = dict:store(Name, prefix_name(Name), GlobalScope#scope.names_dict),
-    Args = [erl_syntax:atom(prefix_name(Name)), erl_syntax:atom(undefined)], 
+var_declare(Key, [], Ctx, #tree_acc{js_scopes = [GlobalScope]}=Acc) ->      
+    Dict = dict:store(Key, prefix_name(Key), GlobalScope#scope.names_dict),
+    Args = [erl_syntax:atom(prefix_name(Key)), erl_syntax:atom(undefined)], 
     Ast = erl_syntax:application(none, erl_syntax:atom(put), Args),
     Acc2 = Acc#tree_acc{js_scopes=[#scope{names_dict = Dict}]}, 
     {{[], #ast_inf{global_asts = [Ast]}}, {Ctx, Acc2}};    
-var_declare(Name, {identifier, _, undefined}, Ctx,  #tree_acc{js_scopes = [_]}=Acc) -> 
-    {_, {_, Acc2}}  = var_ast(Name, Ctx, Acc),
-    Args = [erl_syntax:atom(prefix_name(Name)), erl_syntax:atom(undefined)], 
+var_declare(Key, {identifier, _, undefined}, Ctx,  #tree_acc{js_scopes = [_]}=Acc) -> 
+    {_, {_, Acc2}}  = var_ast(Key, Ctx, Acc),
+    Args = [erl_syntax:atom(prefix_name(Key)), erl_syntax:atom(undefined)], 
     Ast = erl_syntax:application(none, erl_syntax:atom(put), Args),
     {{[], #ast_inf{global_asts = [Ast]}}, {Ctx, Acc2}}; 
-var_declare(Name, {identifier, _, 'Infinity'}, Ctx,  #tree_acc{js_scopes = [_]}=Acc) -> 
-    {_, {_, Acc2}}  = var_ast(Name, Ctx, Acc),
-    Args = [erl_syntax:atom(prefix_name(Name)), erl_syntax:atom('Infinity')], 
+var_declare(Key, {identifier, _, 'Infinity'}, Ctx,  #tree_acc{js_scopes = [_]}=Acc) -> 
+    {_, {_, Acc2}}  = var_ast(Key, Ctx, Acc),
+    Args = [erl_syntax:atom(prefix_name(Key)), erl_syntax:atom('Infinity')], 
     Ast = erl_syntax:application(none, erl_syntax:atom(put), Args),
     {{[], #ast_inf{global_asts = [Ast]}}, {Ctx, Acc2}};    
-var_declare(Name, {identifier, _, 'NaN'}, Ctx,  #tree_acc{js_scopes = [_]}=Acc) -> 
-    {_, {_, Acc2}}  = var_ast(Name, Ctx, Acc),
-    Args = [erl_syntax:atom(prefix_name(Name)), erl_syntax:atom('NaN')], 
+var_declare(Key, {identifier, _, 'NaN'}, Ctx,  #tree_acc{js_scopes = [_]}=Acc) -> 
+    {_, {_, Acc2}}  = var_ast(Key, Ctx, Acc),
+    Args = [erl_syntax:atom(prefix_name(Key)), erl_syntax:atom('NaN')], 
     Ast = erl_syntax:application(none, erl_syntax:atom(put), Args),
     {{[], #ast_inf{global_asts = [Ast]}}, {Ctx, Acc2}};           
-var_declare(Name, Value, Ctx,  #tree_acc{js_scopes = [GlobalScope]}=Acc) ->      
-    Dict = dict:store(Name, prefix_name(Name), GlobalScope#scope.names_dict),
+var_declare(Key, Value, Ctx,  #tree_acc{js_scopes = [GlobalScope]}=Acc) ->      
+    Dict = dict:store(Key, prefix_name(Key), GlobalScope#scope.names_dict),
     Acc2 = Acc#tree_acc{js_scopes=[#scope{names_dict = Dict}]},
     {ValueAst, Inf, Acc2} = body_ast(Value, Ctx, Acc2),
-    Args = [erl_syntax:atom(prefix_name(Name)), ValueAst], 
+    Args = [erl_syntax:atom(prefix_name(Key)), ValueAst], 
     Ast = erl_syntax:application(none, erl_syntax:atom(put), Args), 
     Asts = [Ast | Inf#ast_inf.global_asts],
     {{[], Inf#ast_inf{global_asts = Asts}}, {Ctx, Acc2}};  
-var_declare(Name, [], Ctx, Acc) ->
-    {{AstVariable, _}, {_, Acc2}}  = var_ast(Name, Ctx, Acc),
+var_declare(Key, [], Ctx, Acc) ->
+    {{AstVariable, _}, {_, Acc2}}  = var_ast(Key, Ctx, Acc),
     Ast = erl_syntax:match_expr(AstVariable, erl_syntax:atom(undefined)),  
     {{Ast, #ast_inf{}}, {Ctx, Acc2}};  
-var_declare(Name, {identifier, _, undefined}, Ctx, Acc) ->
-    {{AstVar, Inf}, {_, Acc2}}  = var_ast(Name, Ctx, Acc), 
+var_declare(Key, {identifier, _, undefined}, Ctx, Acc) ->
+    {{AstVar, Inf}, {_, Acc2}}  = var_ast(Key, Ctx, Acc), 
     {{erl_syntax:match_expr(AstVar, erl_syntax:atom(undefined)), Inf}, {Ctx, Acc2}};
-var_declare(Name, {identifier, _, 'Infinity'}, Ctx, Acc) ->
-    {{AstVar, Inf}, {_, Acc2}}  = var_ast(Name, Ctx, Acc), 
+var_declare(Key, {identifier, _, 'Infinity'}, Ctx, Acc) ->
+    {{AstVar, Inf}, {_, Acc2}}  = var_ast(Key, Ctx, Acc), 
     {{erl_syntax:match_expr(AstVar, erl_syntax:atom('Infinity')), Inf}, {Ctx, Acc2}};
-var_declare(Name, {identifier, _, 'NaN'}, Ctx, Acc) ->
-    {{AstVar, Inf}, {_, Acc2}}  = var_ast(Name, Ctx, Acc), 
+var_declare(Key, {identifier, _, 'NaN'}, Ctx, Acc) ->
+    {{AstVar, Inf}, {_, Acc2}}  = var_ast(Key, Ctx, Acc), 
     {{erl_syntax:match_expr(AstVar, erl_syntax:atom('NaN')), Inf}, {Ctx, Acc2}};                        
-var_declare(Name, Value, Ctx, Acc) ->
-    {{AstVariable, _}, {_, Acc2}}  = var_ast(Name, Ctx, Acc),
+var_declare(Key, Value, Ctx, Acc) ->
+    {{AstVariable, _}, {_, Acc2}}  = var_ast(Key, Ctx, Acc),
     {AstValue, Info, Acc3} = body_ast(Value, Ctx, Acc2),
     Ast = erl_syntax:match_expr(AstVariable, AstValue),  
     {{Ast, Info}, {Ctx, Acc3}}.
@@ -520,15 +549,15 @@ var_declare(Name, Value, Ctx, Acc) ->
   
 name_search(_, [], _) ->
     not_found;
-name_search(Name, [H | T], Acc) ->
-    case dict:find(Name, H#scope.names_dict) of
+name_search(Key, [H | T], Acc) ->
+    case dict:find(Key, H#scope.names_dict) of
         {ok, Value} ->
             case T of
                 [] -> 
-                    {global, prefix_name(Name)};
+                    {global, prefix_name(Key)};
                 _ -> Value
             end;
-        error -> name_search(Name, T, [H | Acc]) 
+        error -> name_search(Key, T, [H | Acc]) 
     end.
 
 
@@ -616,8 +645,9 @@ call(Name, Args, Ctx, Acc) ->
     end.
 
 
-call(Name, MemberList, Args, Ctx, Acc) ->
-    case api_func(Name, MemberList) of
+call(Name, Names, Args, Ctx, Acc) ->
+    Arity = length(Args),
+    case api_func(Name, Names, Arity) of
         {Module, Function} ->
             {Args1, _, Acc1} = body_ast(Args, Ctx, Acc),    
             Ast = erl_syntax:application(erl_syntax:atom(Module), erl_syntax:atom(Function), Args1),
@@ -639,11 +669,11 @@ native_global_func(parseInt, 2) -> ok;
 native_global_func(parseFloat, 1) -> ok;
 native_global_func(_, _) -> false.
 
-api_func(console, [log])  ->
-    {erlyjs_api_console, log};
-api_func(_, _) ->
-    false.
-         
+api_func(console = Name, [log = Func], 1)  -> build_api_func(Name, Func);
+api_func(_, _, _) -> false.    
+
+build_api_func(Name, Func) -> {lists:concat(["erlyjs_api_", Name]), Func}.
+   
  
 assign_ast('=', Name, _, Ast2, Inf, #js_ctx{global = true} = Ctx, Acc) ->
     %% TODO: dynamic typechecking
