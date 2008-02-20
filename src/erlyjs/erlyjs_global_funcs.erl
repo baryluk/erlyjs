@@ -33,6 +33,43 @@
 -module(erlyjs_global_funcs).
 -author('rsaccon@gmail.com').
 
+-define(SKIP_ENCODE_URI(C), ((C >= $a andalso C =< $z) orelse
+                             (C >= $A andalso C =< $Z) orelse
+                             (C >= $0 andalso C =< $9) orelse
+                             (C =:= $- orelse 
+                              C =:= $_ orelse 
+                              C =:= $. orelse 
+                              C =:= $! orelse 
+                              C =:= $~ orelse 
+                              C =:= $* orelse 
+                              C =:= $' orelse 
+                              C =:= $( orelse 
+                              C =:= $) orelse                             
+                              C =:= $; orelse 
+                              C =:= $, orelse 
+                              C =:= $/ orelse 
+                              C =:= $? orelse 
+                              C =:= $: orelse 
+                              C =:= $@ orelse 
+                              C =:= $& orelse 
+                              C =:= $= orelse 
+                              C =:= $+ orelse 
+                              C =:= $$ orelse
+                              C =:= $#))).
+                                  
+-define(SKIP_ENCODE_URI_COMP(C), ((C >= $a andalso C =< $z) orelse
+                                  (C >= $A andalso C =< $Z) orelse
+                                  (C >= $0 andalso C =< $9) orelse
+                                  (C =:= $- orelse 
+                                   C =:= $_ orelse 
+                                   C =:= $. orelse 
+                                   C =:= $! orelse 
+                                   C =:= $~ orelse 
+                                   C =:= $* orelse 
+                                   C =:= $' orelse 
+                                   C =:= $( orelse 
+                                   C =:= $)))).
+
 %% API
 -export([
     decodeURI/1,
@@ -64,12 +101,12 @@ decodeURIComponent(_Str) ->
     exit(not_implemented_yet).
 
 
-encodeURI(_Str) ->
-    exit(not_implemented_yet).
+encodeURI(Str) ->
+    {ok, encode(Str, uri)}. 
 
 
-encodeURIComponent(_Str) ->
-    exit(not_implemented_yet).
+encodeURIComponent(Str) ->
+    {ok, encode(Str, uri_component)}.
 
 
 %% TODO: variable mapping and bindings
@@ -156,4 +193,50 @@ parseFloat2(X) ->
         Val -> Val
     catch
         error:badarg -> 'NaN'
+    end.
+    
+    
+encode([Input], Type) when is_list(Input) or is_binary(Input) ->
+    encode(Input, Type);
+encode(Input, Type) when is_binary(Input) ->
+    encode(Input, Type, 0);
+encode(Input, Type) when is_list(Input) ->
+    encode(Input, Type, []).
+    
+    
+encode(Input, Type, Index) when is_binary(Input) ->
+    case {Input, Type} of
+        {<<_:Index/binary, Byte, _/binary>>, uri = Type} when ?SKIP_ENCODE_URI(Byte) ->
+            encode(Input, Type, Index + 1);
+        {<<_:Index/binary, Byte, _/binary>>, uri_component = Type} when ?SKIP_ENCODE_URI_COMP(Byte) ->
+            encode(Input, Type, Index + 1);
+        {<<Pre:Index/binary, Hi:4, Lo:4, Post/binary>>, Type} ->
+            HiDigit = hexdigit(Hi),
+            LoDigit = hexdigit(Lo),
+            Code = <<$\%, HiDigit, LoDigit>>,
+            process_binary_match(Pre, Code, size(Post), encode(Post, Type, 0));
+        {Input, _} ->
+            Input
+    end;
+encode([], _, Acc) ->
+    lists:reverse(Acc);
+encode([C | Rest], uri = Type, Acc) when ?SKIP_ENCODE_URI(C) ->
+    encode(Rest, Type, [C | Acc]);   
+encode([C | Rest], uri_component = Type, Acc) when ?SKIP_ENCODE_URI_COMP(C) ->
+    encode(Rest, Type, [C | Acc]);
+encode([C | Rest], Type, Acc) ->
+    <<Hi:4, Lo:4>> = <<C>>,
+    encode(Rest, Type, [hexdigit(Lo), hexdigit(Hi), $\% | Acc]).
+
+
+hexdigit(C) when C < 10 -> $0 + C;
+hexdigit(C) when C < 16 -> $A + (C - 10).
+
+
+process_binary_match(Pre, Insertion, SizePost, Post) ->
+    case {size(Pre), SizePost} of
+        {0, 0} -> Insertion;
+        {0, _} -> [Insertion, Post];
+        {_, 0} -> [Pre, Insertion];
+        _ -> [Pre, Insertion, Post]
     end.
