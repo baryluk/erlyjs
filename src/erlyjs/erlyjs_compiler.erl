@@ -645,7 +645,12 @@ call(Name, Args, Ctx, Acc) ->
             {Args2, _, Acc2} = parse_transform(Args, Ctx, Acc),  
             Ast = erl_syntax:application(erl_syntax:atom(erlyjs_global_funcs), 
                 erl_syntax:atom(Name), Args2),
-            {{Ast, #ast_inf{}}, {Ctx, Acc2}};
+            Ast2 = erl_syntax:case_expr(Ast, [
+                erl_syntax:clause([erl_syntax:atom(ok)], none, [erl_syntax:atom(ok)]),
+                erl_syntax:clause([erl_syntax:tuple([erl_syntax:atom(ok), 
+                    erl_syntax:variable("Val")])], none, [erl_syntax:variable("Val")]),
+                erl_syntax:clause([erl_syntax:underscore()], none, [erl_syntax:atom(error)])]),
+            {{Ast2, #ast_inf{}}, {Ctx, Acc2}};
         _ ->
             throw({error, lists:concat(["No such global function: ", 
                 Name, " (arity: ", Arity, ")"])})
@@ -658,7 +663,12 @@ call(Name, Names, Args, Ctx, Acc) ->
         {Module, Function} ->
             {Args1, _, Acc1} = parse_transform(Args, Ctx, Acc),    
             Ast = erl_syntax:application(erl_syntax:atom(Module), erl_syntax:atom(Function), Args1),
-            maybe_global({{Ast, #ast_inf{}}, {Ctx, Acc1}});
+            Ast2 = erl_syntax:case_expr(Ast, [
+                erl_syntax:clause([erl_syntax:atom(ok)], none, [erl_syntax:atom(ok)]),
+                erl_syntax:clause([erl_syntax:tuple([erl_syntax:atom(ok), 
+                    erl_syntax:variable("Val")])], none, [erl_syntax:variable("Val")]),
+                erl_syntax:clause([erl_syntax:underscore()], none, [erl_syntax:atom(error)])]),
+            maybe_global({{Ast2, #ast_inf{}}, {Ctx, Acc1}});
         _ ->
             throw({error, lists:concat(["No such function: ", todo_prettyprint_functionname])})
     end.
@@ -669,6 +679,7 @@ native_global_func(decodeURIComponent, 1) -> ok;
 native_global_func(encodeURI, 1) -> ok;
 native_global_func(encodeURIComponent, 1) -> ok;
 native_global_func(eval, 1) -> ok;
+native_global_func(eval, 2) -> ok;
 native_global_func(isFinite, 1) -> ok;
 native_global_func(isNaN, 1) -> ok;
 native_global_func(parseInt, 1) -> ok;

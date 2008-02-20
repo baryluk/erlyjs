@@ -40,6 +40,7 @@
     encodeURI/1,
     encodeURIComponent/1,
     eval/1,
+    eval/2,
     isFinite/1,
     isNaN/1,
     parseInt/1,
@@ -71,73 +72,88 @@ encodeURIComponent(_Str) ->
     exit(not_implemented_yet).
 
 
+%% TODO: variable mapping and bindings
 eval(Str) when is_list(Str) ->
     case erlyjs_compiler:parse(Str) of
         {ok, JsParseTree} -> 
             try erlyjs_compiler:parse_transform(JsParseTree) of
-                {ErlAstList, Info, _} ->    
+                {ErlAstList, _, _} ->    
                     L = [erl_syntax:revert(X) || X <- ErlAstList],             
-                    NewBindings = erl_eval:new_bindings(),
                     case  erl_eval:exprs(L, erl_eval:new_bindings()) of
                         {value, Value, _Bindings} ->
-                            Value;
+                            {ok, Value};
                         Err ->
-                            io:format("TRACE ~p:~p ~p~n",[?MODULE, ?LINE, Err])
+                            Err
                     end;
                 Err ->
-                    io:format("TRACE ~p:~p ~p~n",[?MODULE, ?LINE, Err])                                                     
+                    Err                                                    
             catch 
-                throw:Error ->
-                    io:format("TRACE ~p:~p ~p~n",[?MODULE, ?LINE, Error]),
-                    Error
+                throw:Err ->
+                    Err
             end;
         Err ->
-            io:format("TRACE ~p:~p ~p~n",[?MODULE, ?LINE, Err])
+            Err
     end.
     
     
+eval(Str, _Object) when is_list(Str) ->
+    exit(not_implemented_yet).
+    
+        
 %% TODO: check for positive infinity or negative infinity
 isFinite(X) ->
-    not isNaN(X).
+    case isNaN(X) of
+        {ok, true} ->
+            {ok, false};
+        _ ->
+            {ok, true}
+    end.
+            
     
     
 %% TODO: check for positive infinity or negative infinity    
 isNaN('NaN') ->
-    true;
+    {ok, true};
 isNaN(X) when is_number(X) ->
-    false;
+    {ok, false};
 isNaN(X) ->
-    case isNaN(parseInt(X)) of
-        true ->
-            isNaN(parseFloat(X));
+    case isNaN(parseInt2(X)) of
+        {ok, true} ->
+            isNaN(parseFloat2(X));
         _ ->
-            false
+            {ok, false}
     end.
 
             
-%% TODO: a lot, this is just the most simple case
-parseInt(Str) ->
-    try list_to_integer(Str) of
-        Val -> Val
-    catch
-        error:badarg -> 'NaN'
-    end.
-    
-    
+parseInt(Str) -> 
+    {ok, parseInt2(Str)}.
+
+
 parseInt(_Str, _Radix) ->
     exit(not_implemented_yet).
         
-            
-%% TODO: a lot, this is just the most simple case    
-parseFloat(X) ->
-    try list_to_float(X) of
-        Val -> Val
-    catch
-        error:badarg -> 'NaN'
-    end.
-    
+
+parseFloat(Str) ->
+    {ok, parseFloat2(Str)}.
+
     
 %%====================================================================
 %% Internal functions
 %%====================================================================
 
+%% TODO: a lot, this is just the most simple case
+parseInt2(Str) ->
+    try list_to_integer(Str) of
+        Val -> Val
+    catch
+        error:badarg -> 'NaN'
+    end.
+        
+            
+%% TODO: a lot, this is just the most simple case    
+parseFloat2(X) ->
+    try list_to_float(X) of
+        Val -> Val
+    catch
+        error:badarg -> 'NaN'
+    end.
