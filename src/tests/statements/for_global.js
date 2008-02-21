@@ -15,17 +15,15 @@ function test_ok() {
 }
 
 // Optional. Provide here any global code.
-
+var n=0;
+       
+for (var i=0; i<4; i += 1 ) {
+    n += i;        
+}
 
 // Mandatory. The actual test. 
 // Testsuite invokes this function with the arguments from test_args()
 // and compares the return value with the expected result from test_ok().
-function test() {
-    var n=0;
-    
-    for (var i=0; i<4; i += 1 )
-        n += i;
-
+function test() {       
     return n;
 }
-

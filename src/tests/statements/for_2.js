@@ -23,9 +23,9 @@ function test_ok() {
 function test() {
     var n=0;
     
-    for (var i=0; i<4; i += 1 )
-        n += i;
-
+    for (var i=0; i<4; i += 1 ) {
+        n += i;        
+    }
+        
     return n;
 }
-
