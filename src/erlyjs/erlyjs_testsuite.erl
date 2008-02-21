@@ -33,7 +33,7 @@
 -author('rsaccon@gmail.com').
 
 %% API
--export([run/0, run/1]).
+-export([run/0, run_group/1, run/1]).
 
 %%====================================================================
 %% API
@@ -45,26 +45,19 @@
 %% @end 
 %%--------------------------------------------------------------------
 run() ->    
-    case recreate_lexer_parser() of
-        ok ->
-            case fold_tests("^[^(SKIP_)].+\.js$", false) of
-                {N, []}->
-                    Msg = lists:concat(["All ", N, " regression tests passed"]),
-                    {ok, Msg};
-                {_, Errs} -> 
-                    {error, Errs}
-            end;
-        Err ->
-            Err
-    end.
-    
+    run2(src_test_dir()).   
+
+
+run_group(Group) -> 
+   run2(filename:join([src_test_dir(), Group])).   
+         
     
 run(Name) ->
     case recreate_lexer_parser() of
         ok ->
             case make:all([load]) of
                 up_to_date ->
-                    case fold_tests("^" ++ Name ++ "\.js$", true) of
+                    case fold_tests("^" ++ Name ++ "\.js$", true, src_test_dir()) of
                         {0, _} -> {error, "Test not found: " ++ Name ++ ".js"};
                         {1, []} -> {ok, "Regression test passed"};
                         {1, Errs} -> {error, Errs};
@@ -82,7 +75,22 @@ run(Name) ->
 %%====================================================================
 %% Internal functions
 %%====================================================================
-
+  
+run2(Dir) ->    
+    case recreate_lexer_parser() of
+        ok ->                                               
+            case fold_tests("^[^(SKIP_)].+\.js$", false, Dir) of
+                {N, []}->
+                    Msg = lists:concat(["All ", N, " regression tests passed"]),
+                    {ok, Msg};
+                {_, Errs} -> 
+                    {error, Errs}
+            end;
+        Err ->
+            Err
+    end.        
+    
+    
 recreate_lexer_parser() ->
     crypto:start(),
     case recreate(erlyjs:lexer_src(),  lexer) of
@@ -114,8 +122,8 @@ recreate(File, What) ->
     end.
             
 
-fold_tests(RegExp, Verbose) ->
-    filelib:fold_files(src_test_dir(), RegExp, true, 
+fold_tests(RegExp, Verbose, Dir) ->
+    filelib:fold_files(Dir, RegExp, true, 
         fun
             (File, {AccCount, AccErrs}) ->
                 case test(File, Verbose) of
