@@ -478,12 +478,10 @@ ast({for, Init, Cond, Final, Stmt}, {Ctx, Acc}) ->
         [erl_syntax:clause([VarsBefore], none, [AstFuncCond])]),
     Ast = erl_syntax:match_expr(VarsAfter, 
         erl_syntax:application(none, func_name(Acc6), [VarsBefore])),    
-    {{append_asts(OutInit, Ast), #ast_inf{internal_func_asts = [Func]}}, {Ctx, wrap_remove_var_pairs(Acc7)}};   
-    
+    {{append_asts(OutInit, Ast), #ast_inf{internal_func_asts = [Func]}}, {Ctx, wrap_remove_var_pairs(Acc7)}};     
 ast({switch, Cond, CaseList, {_, DefaultStmts}}, {Ctx, Acc}) ->     
-    {Cond2, _, Acc2} = p_t(Cond, Ctx, Acc),     
-  
-    {L, Acc3} = lists:mapfoldl(   
+    {Cond2, _, Acc2} = p_t(Cond, Ctx, Acc),      
+    {List, Acc3} = lists:mapfoldl(   
         fun      
             ({default, StmtsIn}, AccIn) ->  
                 AccIn2 = wrap_reset_var_pairs(AccIn),
@@ -509,12 +507,12 @@ ast({switch, Cond, CaseList, {_, DefaultStmts}}, {Ctx, Acc}) ->
                     {break, _} ->                       
                         StmtsIn2 = lists:reverse(tl(lists:reverse(StmtsIn))),
                         {LabelsOut, _, _} = p_t(LabelsIn, Ctx, AccIn2), 
-                        Guards = lists:map(
+                        Guards = erl_syntax:disjunction(lists:map(
                             fun
                                 (Label) -> 
                                     Ast = erl_syntax:variable("X"),
                                     erl_syntax:infix_expr(Ast, erl_syntax:operator('=='), Label)
-                            end, LabelsOut), 
+                            end, LabelsOut)), 
                         {StmtsOut, _, AccOut} = p_t(StmtsIn2, Ctx, AccIn2),  
                         VarPairs = dict:to_list(hd(AccOut#tree_acc.var_pairs)),          
                         {{erl_syntax:variable("X"), Guards, StmtsOut, VarPairs, AccOut}, AccOut};
@@ -522,16 +520,9 @@ ast({switch, Cond, CaseList, {_, DefaultStmts}}, {Ctx, Acc}) ->
                          exit(not_implemented_yet) 
                 end         
         end, wrap_add_var_pairs(Acc2), CaseList ++ [{default, DefaultStmts}]),       
-     
-    LabelList = [ X || {X,_,_,_,_} <- L],
-    GuardsList = [ X || {_,X,_,_,_} <- L],
-    StmtsList = [ X || {_,_,X,_,_} <- L],
-    VarPairsList = [ X || {_,_,_,X,_} <- L],
-    AccList = [ X || {_,_,_,_,X} <- L],
-       
-    KeyList = lists:usort([ Key || {Key, _} <-  lists:flatten(VarPairsList)]), 
-
-    StmtReturnVarsList = lists:map(
+    KeyList = lists:usort([ Key || {Key, _} <- lists:flatten([ X || {_,_,_,X,_} <- List])]), 
+    AccList = [ X || {_,_,_,_,X} <- List],
+    StmtsReturnVarsList = lists:map(
         fun
             (X) ->
                 erl_syntax:tuple(lists:map(
@@ -551,16 +542,12 @@ ast({switch, Cond, CaseList, {_, DefaultStmts}}, {Ctx, Acc}) ->
             (Key, AccIn) ->
                {{Ast, _}, {_, AccOut}} = var_ast(Key, Ctx#js_ctx{action = set}, AccIn),
             {Ast, AccOut}
-        end,  Acc3, KeyList),   
-    List = lists:zipwith(
-        fun 
-            ({Label, Guard}, {Stmt, StmtReturnVars}) -> 
-                {Label, Guard, append_asts(Stmt, StmtReturnVars)} 
-        end, lists:zip(LabelList, GuardsList), lists:zip(StmtsList, StmtReturnVarsList)),   
-    Clauses = lists:map(
+        end,  Acc3, KeyList),                    
+    Clauses =  lists:map(
         fun
-            ({Label, Guard, Stmts}) -> erl_syntax:clause([Label], Guard, Stmts)
-        end, List),  
+            ({{Label, Guard, Stmts, _, _}, StmtsReturnVars}) ->
+                erl_syntax:clause([Label], Guard, append_asts(Stmts, StmtsReturnVars))
+        end, lists:zip(List, StmtsReturnVarsList)),                                                              
     Ast = erl_syntax:match_expr(erl_syntax:tuple(Vars), erl_syntax:case_expr(Cond2, Clauses)),      
     {{Ast, #ast_inf{}}, {Ctx, wrap_remove_var_pairs(Acc4)}};
 ast(Unknown, _) ->  
