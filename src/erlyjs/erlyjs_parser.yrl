@@ -334,22 +334,23 @@ BlockStatements ->  BlockStatements  Statement : '$1' ++ ['$2'].
 LabeledStatement -> identifier ':' Statement : {label, '$2'}. 
 
 %% If Statement
-IfStatement -> if ParenthesizedExpression Statement  : {'if', '$2', '$3'}.
-IfStatement -> if ParenthesizedExpression Statement else Statement : {'if', '$2', '$3', '$5'}.
+IfStatement -> 'if' ParenthesizedExpression Statement  : {'if', '$2', '$3'}.
+IfStatement -> 'if' ParenthesizedExpression Statement else Statement : {'if', '$2', '$3', '$5'}.
 
 
-%% Switch Statement  TODO
-SwitchStatement -> switch ParenthesizedExpression '{' '}' : '$1'.
-%% SwitchStatement -> switch ParenthesizedExpression '{' CaseGroups LastCaseGroup '}' : '$1'.
-%% CaseGroups -> '$empty' : [].
-%% CaseGroups -> CaseGroups CaseGroup : '$1'.
-%% CaseGroup -> CaseGuards BlockStatementsPrefix : '$1'.
-%% LastCaseGroup  -> CaseGuards BlockStatements : '$1'.
-%% CaseGuards -> CaseGuard : '$1'.
-%% CaseGuards -> CaseGuards CaseGuard  : '$1'.
-%% CaseGuard -> case Expression ':' : '$1'.
-%% CaseGuard -> default ':' : '$1'.
-     
+%% Switch Statement
+SwitchStatement -> switch ParenthesizedExpression '{' '}' : [].
+SwitchStatement -> switch ParenthesizedExpression '{' CaseGroups LastCaseGroup '}' : {switch, '$2', '$4', '$5'}.
+CaseGroups -> '$empty' : [].
+CaseGroups -> CaseGroups CaseGroup : '$1' ++ ['$2'].   
+CaseGroup -> CaseGuards BlockStatements : {'$1', '$2'}.       
+LastCaseGroup  -> CaseGuards BlockStatements : {'$1', '$2'}.  
+CaseGuards -> CaseGuard : ['$1'].
+CaseGuards -> CaseGuards CaseGuard : '$1' ++ ['$2'].  
+CaseGuard -> 'case' Expression ':' : '$2'.
+CaseGuard -> default ':' : default. 
+
+                                              
 %% Do-While Statement
 DoStatement -> do Statement while ParenthesizedExpression : {do_while, '$2', '$4'}.
 

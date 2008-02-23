@@ -83,7 +83,7 @@ compile(File, Module, Options) ->
                             trace(?MODULE, ?LINE, "Forms", Forms, Ctx),                            
                             compile_forms(Forms, Ctx)                                      
                     catch 
-                        throw:Error ->
+                        throw:Error ->   
                             Error
                     end;
                 Error ->
@@ -222,13 +222,13 @@ p_t(JsParseTree, Ctx, Acc) ->
     
   
 parse_transform(JsParseTree, Ctx, Acc) when is_list(JsParseTree) ->
-    {AstInfList, {_, Acc1}} = lists:mapfoldl(fun ast/2, {Ctx, Acc}, JsParseTree),    
+    {AstInfList, {_, Acc1}} = lists:mapfoldl(fun ast/2, {Ctx, Acc}, JsParseTree),   
     {AstList, Inf} = lists:mapfoldl(
         fun
             ({XAst, XInf}, InfAcc) ->
                 {XAst, append_info(XInf, InfAcc)}
         end, #ast_inf{}, AstInfList),         
-    {lists:flatten(AstList), Inf, Acc1};
+    {lists:flatten(AstList), Inf, Acc1};  
 parse_transform(JsParseTree, Ctx, Acc) ->
     {{Ast, Inf}, {_, Acc1}} = ast(JsParseTree, {Ctx, Acc}),
     {Ast, Inf, Acc1}.
@@ -300,16 +300,16 @@ ast({assign, {Op, _}, {identifier, _, Name}, In1}, {Ctx, Acc}) ->
     assign_ast('=', Name, Out4, erlyjs_operators:ast(assign_to_op(Op), Out2, Out3), Inf, Ctx, Acc2);  
 ast({'if', Cond, If}, {#js_ctx{global = true} = Ctx, Acc}) -> 
     {OutCond, _, #tree_acc{names_set = Set}} = p_t(Cond, Ctx, Acc),
-    Acc2 = Acc#tree_acc{names_set = Set, var_pairs = push_var_pairs(Acc)},
+    Acc2 = Acc#tree_acc{names_set = Set, var_pairs = add_var_pairs(Acc)},
     {OutStmt, _, Acc3} = p_t(If, Ctx, Acc2),
     ReturnVarsElse = get_vars_init(Acc, Acc3, Ctx),                                        
     Ast = erl_syntax:case_expr(OutCond, [
         erl_syntax:clause([erl_syntax:atom(true)], none, [OutStmt]),
         erl_syntax:clause([erl_syntax:underscore()], none, [ReturnVarsElse])]),
-    {{[], #ast_inf{global_asts = [Ast]}}, {Ctx, pop_var_pairs(Acc3)}};    
+    {{[], #ast_inf{global_asts = [Ast]}}, {Ctx, wrap_remove_var_pairs(Acc3)}};    
 ast({'if', Cond, If}, {Ctx, Acc}) -> 
     {OutCond, _, #tree_acc{names_set = Set}} = p_t(Cond, Ctx, Acc),
-    Acc2 = Acc#tree_acc{names_set = Set, var_pairs = push_var_pairs(Acc)},
+    Acc2 = Acc#tree_acc{names_set = Set, var_pairs = add_var_pairs(Acc)},
     {OutIf, _, Acc3} = p_t(If, Ctx, Acc2),
     ReturnVarsIf = get_vars_snapshot(Acc3),    
     ReturnVarsElse = get_vars_init(Acc, Acc3, Ctx),
@@ -318,14 +318,17 @@ ast({'if', Cond, If}, {Ctx, Acc}) ->
         erl_syntax:clause([erl_syntax:atom(true)], none, append_asts(OutIf, ReturnVarsIf)),
         erl_syntax:clause([erl_syntax:underscore()], none, [ReturnVarsElse])]),
     Ast2 = erl_syntax:match_expr(Vars, Ast),
-    {{Ast2, #ast_inf{}}, {Ctx, pop_var_pairs(Acc4)}};
+    {{Ast2, #ast_inf{}}, {Ctx, wrap_remove_var_pairs(Acc4)}};
 ast({'if', Cond, If, Else}, {Ctx, Acc}) -> 
     %% TODO: refactor and handle global scope
     {OutCond, _, #tree_acc{names_set = Set}} = parse_transform(Cond, Ctx, Acc),
-    AccOutIfIn = Acc#tree_acc{names_set = Set, var_pairs = push_var_pairs(Acc)},
+    
+    AccOutIfIn = Acc#tree_acc{names_set = Set, var_pairs = add_var_pairs(Acc)},
     {OutIf, _, #tree_acc{names_set = Set1} = Acc1} = parse_transform(If, Ctx, AccOutIfIn), 
-    AccOutElseIn = Acc#tree_acc{names_set = Set1, var_pairs = [dict:new() | Acc#tree_acc.var_pairs]},
+    
+    AccOutElseIn = Acc#tree_acc{names_set = Set1, var_pairs = add_var_pairs(Acc)},
     {OutElse, _, Acc2} = parse_transform(Else, Ctx, AccOutElseIn),
+    
     KeyList = lists:usort([ Key || {Key, _} <- lists:append([
         dict:to_list(hd(Acc1#tree_acc.var_pairs)), 
         dict:to_list(hd(Acc2#tree_acc.var_pairs))])]),
@@ -365,11 +368,11 @@ ast({'if', Cond, If, Else}, {Ctx, Acc}) ->
         erl_syntax:clause([erl_syntax:atom(true)], none, append_asts(OutIf, ReturnVarsIf)),
         erl_syntax:clause([erl_syntax:underscore()], none, append_asts(OutElse, ReturnVarsElse))]),
     Ast2 = erl_syntax:match_expr(erl_syntax:tuple(Vars), Ast),
-    {{Ast2, #ast_inf{}}, {Ctx, pop_var_pairs(Acc3)}};    
+    {{Ast2, #ast_inf{}}, {Ctx, wrap_remove_var_pairs(Acc3)}};    
 ast({do_while, Stmt, Cond}, {#js_ctx{global = true} = Ctx, Acc}) ->   
     Acc2 = Acc#tree_acc{
-        var_pairs = push_var_pairs(Acc),
-        func_counter = inc_func_counter(Acc)},   
+        var_pairs = add_var_pairs(Acc),
+        func_counter = wrap_inc_func_counter(Acc)},   
     {OutStmt, _, Acc3} = p_t(Stmt, Ctx, Acc2),   
     {OutCond, _, Acc4} = p_t(Cond, Ctx, Acc3),
     AstFuncCond = erl_syntax:case_expr(OutCond, [
@@ -380,11 +383,11 @@ ast({do_while, Stmt, Cond}, {#js_ctx{global = true} = Ctx, Acc}) ->
     Func = erl_syntax:function(func_name(Acc2),
         [erl_syntax:clause([], none, append_asts(OutStmt, AstFuncCond))]),
     Ast = erl_syntax:application(none, func_name(Acc2), []),
-    {{[], #ast_inf{internal_func_asts = [Func], global_asts = [Ast]}}, {Ctx, pop_var_pairs(Acc4)}};
+    {{[], #ast_inf{internal_func_asts = [Func], global_asts = [Ast]}}, {Ctx, wrap_remove_var_pairs(Acc4)}};
 ast({do_while, Stmt, Cond}, {Ctx, Acc}) ->  
     Acc2 = Acc#tree_acc{
-        var_pairs = push_var_pairs(Acc),
-        func_counter = inc_func_counter(Acc)},   
+        var_pairs = add_var_pairs(Acc),
+        func_counter = wrap_inc_func_counter(Acc)},   
     {OutStmt, _, Acc3} = parse_transform(Stmt, Ctx, Acc2),   
     {OutCond, _, Acc4} = parse_transform(Cond, Ctx, Acc3),
     VarsBefore = get_vars_init(Acc, Acc3, Ctx),
@@ -399,13 +402,13 @@ ast({do_while, Stmt, Cond}, {Ctx, Acc}) ->
         [erl_syntax:clause([VarsBefore], none, append_asts(OutStmt, AstFuncCond))]),
     Ast = erl_syntax:match_expr(VarsAfter, 
         erl_syntax:application(none, func_name(Acc2), [VarsBefore])),  
-    {{[Ast], #ast_inf{internal_func_asts = [Func]}}, {Ctx, pop_var_pairs(Acc5)}};       
+    {{[Ast], #ast_inf{internal_func_asts = [Func]}}, {Ctx, wrap_remove_var_pairs(Acc5)}};       
 ast({while, Cond, Stmt}, {#js_ctx{global = true} = Ctx, Acc}) ->        
     {OutCond, _, #tree_acc{names_set = Set}} = p_t(Cond, Ctx, Acc),
     Acc2 = Acc#tree_acc{
         names_set = Set, 
-        var_pairs = push_var_pairs(Acc),
-        func_counter = inc_func_counter(Acc)},
+        var_pairs = add_var_pairs(Acc),
+        func_counter = wrap_inc_func_counter(Acc)},
     {OutStmt, _, Acc3} = p_t(Stmt, Ctx, Acc2),
     AstFuncCond = erl_syntax:case_expr(OutCond, [
         erl_syntax:clause([erl_syntax:atom(true)], none,
@@ -415,13 +418,13 @@ ast({while, Cond, Stmt}, {#js_ctx{global = true} = Ctx, Acc}) ->
     Func = erl_syntax:function(func_name(Acc3),
         [erl_syntax:clause([], none, [AstFuncCond])]),
     Ast = erl_syntax:application(none, func_name(Acc3), []),        
-    {{[], #ast_inf{internal_func_asts = [Func], global_asts = [Ast]}}, {Ctx, pop_var_pairs(Acc3)}};      
+    {{[], #ast_inf{internal_func_asts = [Func], global_asts = [Ast]}}, {Ctx, wrap_remove_var_pairs(Acc3)}};      
 ast({while, Cond, Stmt}, {Ctx, Acc}) ->
     {OutCond, _, #tree_acc{names_set = Set}} = parse_transform(Cond, Ctx, Acc),
     Acc2 = Acc#tree_acc{
         names_set = Set, 
-        var_pairs = push_var_pairs(Acc),
-        func_counter = inc_func_counter(Acc)},
+        var_pairs = add_var_pairs(Acc),
+        func_counter = wrap_inc_func_counter(Acc)},
     {OutStmt, _, Acc3} = p_t(Stmt, Ctx, Acc2),
     VarsBefore = get_vars_init(Acc, Acc3, Ctx),
     VarsAfterStmt = get_vars_snapshot(Acc3),
@@ -435,12 +438,12 @@ ast({while, Cond, Stmt}, {Ctx, Acc}) ->
         [erl_syntax:clause([VarsBefore], none, [AstFuncCond])]),
     Ast = erl_syntax:match_expr(VarsAfter, 
         erl_syntax:application(none, func_name(Acc3), [VarsBefore])),           
-    {{[Ast], #ast_inf{internal_func_asts = [Func]}}, {Ctx, pop_var_pairs(Acc4)}};
+    {{[Ast], #ast_inf{internal_func_asts = [Func]}}, {Ctx, wrap_remove_var_pairs(Acc4)}};
 ast({for, Init, Cond, Final, Stmt}, {#js_ctx{global = true} = Ctx, Acc}) -> 
     {OutInit, _, Acc2} = p_t(Init, Ctx, Acc),  
     Acc3 = Acc2#tree_acc{
-        var_pairs = push_var_pairs(Acc),
-        func_counter = inc_func_counter(Acc)},
+        var_pairs = add_var_pairs(Acc),
+        func_counter = wrap_inc_func_counter(Acc)},
     {OutCond, _, Acc4} = p_t(Cond, Ctx, Acc3),
     {OutStmt, _, Acc5} = p_t(Stmt, Ctx, Acc4),                
     {FinalExpr, _, Acc6} = p_t(Final, Ctx, Acc5),
@@ -453,12 +456,12 @@ ast({for, Init, Cond, Final, Stmt}, {#js_ctx{global = true} = Ctx, Acc}) ->
     Func = erl_syntax:function(func_name(Acc5),
         [erl_syntax:clause([], none, [AstFuncCond])]),
     Ast = erl_syntax:application(none, func_name(Acc6), []),                    
-    {{[], #ast_inf{internal_func_asts = [Func], global_asts = append_asts(Ast, OutInit)}}, {Ctx, pop_var_pairs(Acc6)}};
+    {{[], #ast_inf{internal_func_asts = [Func], global_asts = append_asts(Ast, OutInit)}}, {Ctx, wrap_remove_var_pairs(Acc6)}};
 ast({for, Init, Cond, Final, Stmt}, {Ctx, Acc}) -> 
     {OutInit, _, Acc2} = p_t(Init, Ctx, Acc),
     Acc3 = Acc2#tree_acc{
-        var_pairs = push_var_pairs(Acc),
-        func_counter = inc_func_counter(Acc)},
+        var_pairs = add_var_pairs(Acc),
+        func_counter = wrap_inc_func_counter(Acc)},
     {OutCond, _, Acc4} = p_t(Cond, Ctx, Acc3),
     {OutStmt, _, Acc5} = p_t(Stmt, Ctx, Acc4),                
     {FinalExpr, _, Acc6} = p_t(Final, Ctx, Acc5),
@@ -475,12 +478,97 @@ ast({for, Init, Cond, Final, Stmt}, {Ctx, Acc}) ->
         [erl_syntax:clause([VarsBefore], none, [AstFuncCond])]),
     Ast = erl_syntax:match_expr(VarsAfter, 
         erl_syntax:application(none, func_name(Acc6), [VarsBefore])),    
-    {{append_asts(OutInit, Ast), #ast_inf{internal_func_asts = [Func]}}, {Ctx, pop_var_pairs(Acc7)}}; 
-ast(Unknown, _) ->
+    {{append_asts(OutInit, Ast), #ast_inf{internal_func_asts = [Func]}}, {Ctx, wrap_remove_var_pairs(Acc7)}};   
+    
+ast({switch, Cond, CaseList, {_, DefaultStmts}}, {Ctx, Acc}) ->     
+    {Cond2, _, Acc2} = p_t(Cond, Ctx, Acc),     
+  
+    {L, Acc3} = lists:mapfoldl(   
+        fun      
+            ({default, StmtsIn}, AccIn) ->  
+                AccIn2 = wrap_reset_var_pairs(AccIn),
+                LabelOut = erl_syntax:underscore(),
+                {StmtsOut, _, AccOut} = p_t(StmtsIn, Ctx, AccIn2), 
+                VarPairs = dict:to_list(hd(AccOut#tree_acc.var_pairs)),               
+                {{LabelOut, none, StmtsOut, VarPairs, AccOut}, AccOut};                
+            ({[LabelIn], StmtsIn}, AccIn) -> 
+                AccIn2 = wrap_reset_var_pairs(AccIn),
+                case lists:last(StmtsIn) of    
+                    {break, _} ->                       
+                        StmtsIn2 = lists:reverse(tl(lists:reverse(StmtsIn))), 
+                        {LabelOut, _, _} = p_t(LabelIn, Ctx, AccIn2),   
+                        {StmtsOut, _, AccOut} = p_t(StmtsIn2, Ctx, AccIn2),
+                        VarPairs = dict:to_list(hd(AccOut#tree_acc.var_pairs)),                                       
+                        {{LabelOut, none, StmtsOut, VarPairs, AccOut}, AccOut};
+                     _ ->
+                         exit(not_implemented_yet) 
+                end;
+            ({LabelsIn, StmtsIn}, AccIn) ->     
+                AccIn2 = wrap_reset_var_pairs(AccIn),
+                case lists:last(StmtsIn) of    
+                    {break, _} ->                       
+                        StmtsIn2 = lists:reverse(tl(lists:reverse(StmtsIn))),
+                        {LabelsOut, _, _} = p_t(LabelsIn, Ctx, AccIn2), 
+                        Guards = lists:map(
+                            fun
+                                (Label) -> 
+                                    Ast = erl_syntax:variable("X"),
+                                    erl_syntax:infix_expr(Ast, erl_syntax:operator('=='), Label)
+                            end, LabelsOut), 
+                        {StmtsOut, _, AccOut} = p_t(StmtsIn2, Ctx, AccIn2),  
+                        VarPairs = dict:to_list(hd(AccOut#tree_acc.var_pairs)),          
+                        {{erl_syntax:variable("X"), Guards, StmtsOut, VarPairs, AccOut}, AccOut};
+                     _ ->
+                         exit(not_implemented_yet) 
+                end         
+        end, wrap_add_var_pairs(Acc2), CaseList ++ [{default, DefaultStmts}]),       
+     
+    LabelList = [ X || {X,_,_,_,_} <- L],
+    GuardsList = [ X || {_,X,_,_,_} <- L],
+    StmtsList = [ X || {_,_,X,_,_} <- L],
+    VarPairsList = [ X || {_,_,_,X,_} <- L],
+    AccList = [ X || {_,_,_,_,X} <- L],
+       
+    KeyList = lists:usort([ Key || {Key, _} <-  lists:flatten(VarPairsList)]), 
+
+    StmtReturnVarsList = lists:map(
+        fun
+            (X) ->
+                erl_syntax:tuple(lists:map(
+                fun
+                    (Key) ->
+                        case  dict:find(Key, hd(X#tree_acc.var_pairs)) of
+                            {ok, Val} ->
+                               erl_syntax:variable(Val);
+                            error ->
+                               {{Ast, _}, {_, _}} = var_ast(Key, Ctx, Acc),
+                               Ast
+                        end
+                end, KeyList))
+        end, AccList),   
+    {Vars, Acc4} = lists:mapfoldl(
+        fun
+            (Key, AccIn) ->
+               {{Ast, _}, {_, AccOut}} = var_ast(Key, Ctx#js_ctx{action = set}, AccIn),
+            {Ast, AccOut}
+        end,  Acc3, KeyList),   
+    List = lists:zipwith(
+        fun 
+            ({Label, Guard}, {Stmt, StmtReturnVars}) -> 
+                {Label, Guard, append_asts(Stmt, StmtReturnVars)} 
+        end, lists:zip(LabelList, GuardsList), lists:zip(StmtsList, StmtReturnVarsList)),   
+    Clauses = lists:map(
+        fun
+            ({Label, Guard, Stmts}) -> erl_syntax:clause([Label], Guard, Stmts)
+        end, List),  
+    Ast = erl_syntax:match_expr(erl_syntax:tuple(Vars), erl_syntax:case_expr(Cond2, Clauses)),      
+    {{Ast, #ast_inf{}}, {Ctx, wrap_remove_var_pairs(Acc4)}};
+ast(Unknown, _) ->  
     throw({error, lists:concat(["Unknown token: ", Unknown])}). 
     
     
 empty_ast(Ctx, Acc) ->
+    io:format("TRACE ~p:~p ~p~n",[?MODULE, ?LINE, "empty_ast might currently cause exit"]),
     {{[], #ast_inf{}}, {Ctx, Acc}}.  
  
  
@@ -649,7 +737,7 @@ get_vars_result(Acc, AccSet, Ctx) ->
                        
 func(Name, Params, Body, Ctx, Acc) -> 
     {Params1, _, _} = p_t(Params, Ctx, Acc),          
-    {Ast, Inf, _} = p_t(Body, Ctx, push_scope(Acc)),
+    {Ast, Inf, _} = p_t(Body, Ctx, wrap_add_scope(Acc)),
     Ast1 = erl_syntax:function(erl_syntax:atom(global_prefix(Name)),
         [erl_syntax:clause(Params1, none, Ast)]),
     case Ctx#js_ctx.global of
@@ -718,7 +806,7 @@ api_func(_, _, _) -> false.
 build_api_func(Name, Func) -> {lists:concat(["erlyjs_api_", Name]), Func}.
    
  
-assign_ast('=', Name, _, Ast2, Inf, Ctx, #tree_acc{js_scopes = [_]} = Acc) ->
+assign_ast('=', Name, _, Ast2, _, Ctx, #tree_acc{js_scopes = [_]} = Acc) ->
     %% TODO: dynamic typechecking       
     Ast = erl_syntax:application(none, erl_syntax:atom(put), [
         erl_syntax:atom(global_prefix(Name)), Ast2]),
@@ -762,21 +850,19 @@ assign_to_op(Assign) ->
 
 global_prefix(Name) ->
     lists:concat(["js_", Name]).
+                  
+
+add_var_pairs(Acc) -> [dict:new() | Acc#tree_acc.var_pairs].
+
+wrap_add_var_pairs(Acc) -> Acc#tree_acc{var_pairs = [dict:new() | Acc#tree_acc.var_pairs]}.
+        
+wrap_remove_var_pairs(Acc) -> Acc#tree_acc{var_pairs = tl(Acc#tree_acc.var_pairs)}.
+    
+wrap_reset_var_pairs(Acc) -> Acc#tree_acc{var_pairs = [dict:new() | tl(Acc#tree_acc.var_pairs)]}.
             
-push_scope(Acc) ->
-    Acc#tree_acc{js_scopes = [#scope{} | Acc#tree_acc.js_scopes]}.
-    
-
-pop_var_pairs(Acc) ->  
-    Acc#tree_acc{var_pairs = tl(Acc#tree_acc.var_pairs)}.
-
-
-push_var_pairs(Acc) -> 
-    [dict:new() | Acc#tree_acc.var_pairs].
-    
-    
-inc_func_counter(Acc) ->    
-    Acc#tree_acc.func_counter + 1.
+wrap_inc_func_counter(Acc) -> Acc#tree_acc.func_counter + 1.
+           
+wrap_add_scope(Acc) -> Acc#tree_acc{js_scopes = [#scope{} | Acc#tree_acc.js_scopes]}.
 
                    
 trace(Module, Line, Title, Content, Ctx) ->
