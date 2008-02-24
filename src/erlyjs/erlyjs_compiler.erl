@@ -707,7 +707,7 @@ func(Name, Params, Body, Ctx, Trav) ->
       
 call(Name, Args, Ctx, Trav) ->
     Arity = length(Args),
-    case native_global_func(Name, Arity) of
+    case built_in_global_func(Name, Arity) of
         ok ->     
             {Args2, _, Trav2} = p_t(Args, Ctx, Trav),  
             Ast = erl_syntax:application(erl_syntax:atom(erlyjs_global_funcs), 
@@ -741,18 +741,18 @@ call(Name, Names, Args, Ctx, Trav) ->
     end.
         
 
-native_global_func(decodeURI, 1) -> ok;
-native_global_func(decodeURIComponent, 1) -> ok;
-native_global_func(encodeURI, 1) -> ok;
-native_global_func(encodeURIComponent, 1) -> ok;
-native_global_func(eval, 1) -> ok;
-native_global_func(eval, 2) -> ok;
-native_global_func(isFinite, 1) -> ok;
-native_global_func(isNaN, 1) -> ok;
-native_global_func(parseInt, 1) -> ok;
-native_global_func(parseInt, 2) -> ok;
-native_global_func(parseFloat, 1) -> ok;
-native_global_func(_, _) -> false.
+built_in_global_func(decodeURI, 1) -> ok;
+built_in_global_func(decodeURIComponent, 1) -> ok;
+built_in_global_func(encodeURI, 1) -> ok;
+built_in_global_func(encodeURIComponent, 1) -> ok;
+built_in_global_func(eval, 1) -> ok;
+built_in_global_func(eval, 2) -> ok;
+built_in_global_func(isFinite, 1) -> ok;
+built_in_global_func(isNaN, 1) -> ok;
+built_in_global_func(parseInt, 1) -> ok;
+built_in_global_func(parseInt, 2) -> ok;
+built_in_global_func(parseFloat, 1) -> ok;
+built_in_global_func(_, _) -> false.
 
 api_func(console = Name, [log = Func], 1)  -> build_api_func(Name, Func);
 api_func(_, _, _) -> false.    
