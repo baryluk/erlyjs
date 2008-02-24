@@ -46,20 +46,19 @@
     module = [],
     verbose = false}).
     
--record(ast_inf, {
-    vars = [],
-    export_asts = [],
-    global_asts = [],
-    internal_func_asts = []}).
+-record(ast_inf, {              %%  additional info about a parse transfomed AST
+    export_asts = [],           %%  Module header export statements
+    global_asts = [],           %%  Exported Erlang functions
+    internal_func_asts = []}).  %%  Internal Erlang functions  
 
--record(scope, {
-    names_dict = dict:new()}).
+-record(scope, {                %%  represents a Javascript variable scope
+    names_dict = dict:new()}).  %%  Key: JsName, Value: ErlName
     
--record(tree_acc, {
-    names_set = sets:new(),
-    js_scopes = [#scope{}],
-    var_pairs = [],
-    func_counter = 0}).
+-record(trav, {                 %%  traverses the whole tree
+    names_set = sets:new(),     %%  for unique Erlang variable names 
+    js_scopes = [#scope{}],     %%  for Javascript variables scopes
+    names = [],                 %%  for temporary use: [{JsNameAsKey, ErlName}, ...]
+    func_counter = 0}).         %%  for unique internal Erlang function names
  
  
 compile(File, Module) ->
@@ -77,7 +76,7 @@ compile(File, Module, Options) ->
                     ok;
                 {ok, JsParseTree} ->
                     trace(?MODULE, ?LINE, "JsParseTree", JsParseTree, Ctx),
-                    try p_t_root(JsParseTree, Ctx, #tree_acc{}) of
+                    try p_t_root(JsParseTree, Ctx, #trav{}) of
                         {AstList, Info, _} ->                
                             Forms = forms(CheckSum, Module, AstList, Info),  
                             trace(?MODULE, ?LINE, "Forms", Forms, Ctx),                            
@@ -106,7 +105,7 @@ parse(Data) ->
 
     
 parse_transform(JsParseTree) ->
-    parse_transform(JsParseTree, #js_ctx{}, #tree_acc{}).
+    parse_transform(JsParseTree, #js_ctx{}, #trav{}).
     
 	
 %%====================================================================
@@ -213,130 +212,130 @@ compile_forms(Forms, Ctx) ->
     end.
     
  
-p_t_root(JsParseTree, Ctx, Acc) -> 
-    parse_transform(JsParseTree, Ctx#js_ctx{global = true}, Acc).
+p_t_root(JsParseTree, Ctx, Trav) -> 
+    parse_transform(JsParseTree, Ctx#js_ctx{global = true}, Trav).
         
         
-p_t(JsParseTree, Ctx, Acc) -> 
-    parse_transform(JsParseTree, Ctx#js_ctx{global = false}, Acc).
+p_t(JsParseTree, Ctx, Trav) -> 
+    parse_transform(JsParseTree, Ctx#js_ctx{global = false}, Trav).
     
   
-parse_transform(JsParseTree, Ctx, Acc) when is_list(JsParseTree) ->
-    {AstInfList, {_, Acc1}} = lists:mapfoldl(fun ast/2, {Ctx, Acc}, JsParseTree),   
+parse_transform(JsParseTree, Ctx, Trav) when is_list(JsParseTree) ->
+    {AstInfList, {_, Trav1}} = lists:mapfoldl(fun ast/2, {Ctx, Trav}, JsParseTree),   
     {AstList, Inf} = lists:mapfoldl(
         fun
             ({XAst, XInf}, InfAcc) ->
                 {XAst, append_info(XInf, InfAcc)}
         end, #ast_inf{}, AstInfList),         
-    {lists:flatten(AstList), Inf, Acc1};  
-parse_transform(JsParseTree, Ctx, Acc) ->
-    {{Ast, Inf}, {_, Acc1}} = ast(JsParseTree, {Ctx, Acc}),
-    {Ast, Inf, Acc1}.
+    {lists:flatten(AstList), Inf, Trav1};  
+parse_transform(JsParseTree, Ctx, Trav) ->
+    {{Ast, Inf}, {_, Trav1}} = ast(JsParseTree, {Ctx, Trav}),
+    {Ast, Inf, Trav1}.
 
 
-ast({identifier, _, true}, {Ctx, Acc}) -> 
-    {{erl_syntax:atom(true), #ast_inf{}}, {Ctx, Acc}};
-ast({identifier, _, false}, {Ctx, Acc}) -> 
-    {{erl_syntax:atom(false), #ast_inf{}}, {Ctx, Acc}};    
-ast({integer, _, Value}, {Ctx, Acc}) -> 
-    {{erl_syntax:integer(Value), #ast_inf{}}, {Ctx, Acc}};
-ast({float, _, Value}, {Ctx, Acc}) -> 
-    {{erl_syntax:float(Value), #ast_inf{}}, {Ctx, Acc}};
-ast({string, _, Value}, {Ctx, Acc}) ->
-    {{erl_syntax:string(Value), #ast_inf{}}, {Ctx, Acc}}; %% TODO: binary instead of string 
-ast({{'[', _L},  Value}, {Ctx, Acc}) -> 
+ast({identifier, _, true}, {Ctx, Trav}) -> 
+    {{erl_syntax:atom(true), #ast_inf{}}, {Ctx, Trav}};
+ast({identifier, _, false}, {Ctx, Trav}) -> 
+    {{erl_syntax:atom(false), #ast_inf{}}, {Ctx, Trav}};    
+ast({integer, _, Value}, {Ctx, Trav}) -> 
+    {{erl_syntax:integer(Value), #ast_inf{}}, {Ctx, Trav}};
+ast({float, _, Value}, {Ctx, Trav}) -> 
+    {{erl_syntax:float(Value), #ast_inf{}}, {Ctx, Trav}};
+ast({string, _, Value}, {Ctx, Trav}) ->
+    {{erl_syntax:string(Value), #ast_inf{}}, {Ctx, Trav}}; %% TODO: binary instead of string 
+ast({{'[', _L},  Value}, {Ctx, Trav}) -> 
     %% TODO: implementation and tests, this just works for empty lists
-    {{erl_syntax:list(Value), #ast_inf{}}, {Ctx, Acc}};
-ast({{identifier, _, undefined}, _}, {Ctx, Acc}) ->  
-    {{erl_syntax:atom(undefined), #ast_inf{}}, {Ctx, Acc}};    
-ast({{identifier, _, 'Infinity'}, _}, {Ctx, Acc}) ->  
-    {{erl_syntax:atom('Infinity'), #ast_inf{}}, {Ctx, Acc}};
-ast({{identifier, _, 'NaN'}, _}, {Ctx, Acc}) ->  
-    {{erl_syntax:atom('NaN'), #ast_inf{}}, {Ctx, Acc}};
-ast({identifier, _, Name}, {Ctx, Acc}) ->  
-    var_ast(Name, Ctx, Acc);
-ast({{identifier, _, Name} , {'(', Args}}, {Ctx, Acc}) ->
-    call(Name, Args, Ctx, Acc);
-ast({{{identifier, _, Name}, Names}, {'(', Args}}, {Ctx, Acc}) ->
-    call(Name, Names, Args, Ctx, Acc);  
-ast({{identifier, _, Name}, Value}, {Ctx, Acc}) -> 
-    var_declare(Name, Value, Ctx, Acc);  
-ast({var, DeclarationList}, {Ctx, Acc}) ->     
-    {Ast, Inf, Acc1} = p_t(DeclarationList, Ctx#js_ctx{action = set}, Acc),         
-    maybe_global({{Ast, Inf}, {Ctx, Acc1}});    
-ast(return, {Ctx, Acc}) -> 
+    {{erl_syntax:list(Value), #ast_inf{}}, {Ctx, Trav}};
+ast({{identifier, _, undefined}, _}, {Ctx, Trav}) ->  
+    {{erl_syntax:atom(undefined), #ast_inf{}}, {Ctx, Trav}};    
+ast({{identifier, _, 'Infinity'}, _}, {Ctx, Trav}) ->  
+    {{erl_syntax:atom('Infinity'), #ast_inf{}}, {Ctx, Trav}};
+ast({{identifier, _, 'NaN'}, _}, {Ctx, Trav}) ->  
+    {{erl_syntax:atom('NaN'), #ast_inf{}}, {Ctx, Trav}};
+ast({identifier, _, Name}, {Ctx, Trav}) ->  
+    var_ast(Name, Ctx, Trav);
+ast({{identifier, _, Name} , {'(', Args}}, {Ctx, Trav}) ->
+    call(Name, Args, Ctx, Trav);
+ast({{{identifier, _, Name}, Names}, {'(', Args}}, {Ctx, Trav}) ->
+    call(Name, Names, Args, Ctx, Trav);  
+ast({{identifier, _, Name}, Value}, {Ctx, Trav}) -> 
+    var_declare(Name, Value, Ctx, Trav);  
+ast({var, DeclarationList}, {Ctx, Trav}) ->     
+    {Ast, Inf, Trav1} = p_t(DeclarationList, Ctx#js_ctx{action = set}, Trav),         
+    maybe_global({{Ast, Inf}, {Ctx, Trav1}});    
+ast(return, {Ctx, Trav}) -> 
     %% TODO: eliminate this clause by adjusting the grammar
-    empty_ast(Ctx, Acc);
-ast({return, Expression}, {Ctx, Acc}) -> 
+    empty_ast(Ctx, Trav);
+ast({return, Expression}, {Ctx, Trav}) -> 
     %% TODO: implementation and tests, this doesnt't work generally
-    ast(Expression, {Ctx, Acc});
-ast({function, {identifier, _L2, Name}, {params, Params, body, Body}}, {Ctx, Acc}) ->
-    func(Name, Params, Body, Ctx, Acc);   
-ast({op, {Op, _}, In}, {Ctx, Acc}) ->
-    {Out, _, #tree_acc{names_set = Set}} = p_t(In, Ctx, Acc),
-    {{erlyjs_operators:ast(Op, Out), #ast_inf{}}, {Ctx, Acc#tree_acc{names_set = Set}}};
-ast({op, {Op, _}, In1, In2}, {Ctx, Acc}) ->
-    {Out1, _, #tree_acc{names_set = Set1}} = p_t(In1, Ctx, Acc),
-    {Out2, _, #tree_acc{names_set = Set2}} = p_t(In2, Ctx, Acc#tree_acc{names_set = Set1}),
-    {{erlyjs_operators:ast(Op, Out1, Out2), #ast_inf{}}, {Ctx, Acc#tree_acc{names_set = Set2}}};
-ast({op, {{Op, postfix}, _}, In1, In2}, {Ctx, Acc}) ->
+    ast(Expression, {Ctx, Trav});
+ast({function, {identifier, _L2, Name}, {params, Params, body, Body}}, {Ctx, Trav}) ->
+    func(Name, Params, Body, Ctx, Trav);   
+ast({op, {Op, _}, In}, {Ctx, Trav}) ->
+    {Out, _, #trav{names_set = Set}} = p_t(In, Ctx, Trav),
+    {{erlyjs_operators:ast(Op, Out), #ast_inf{}}, {Ctx, Trav#trav{names_set = Set}}};
+ast({op, {Op, _}, In1, In2}, {Ctx, Trav}) ->
+    {Out1, _, #trav{names_set = Set1}} = p_t(In1, Ctx, Trav),
+    {Out2, _, #trav{names_set = Set2}} = p_t(In2, Ctx, Trav#trav{names_set = Set1}),
+    {{erlyjs_operators:ast(Op, Out1, Out2), #ast_inf{}}, {Ctx, Trav#trav{names_set = Set2}}};
+ast({op, {{Op, postfix}, _}, In1, In2}, {Ctx, Trav}) ->
     %% TODO: fix this, code below is prefix operator
-    {Out1, _, #tree_acc{names_set = Set1}} = p_t(In1, Ctx, Acc),
-    {Out2, _, #tree_acc{names_set = Set2}} = p_t(In2, Ctx, Acc#tree_acc{names_set = Set1}),
-    {{erlyjs_operators:ast(Op, Out1, Out2), #ast_inf{}}, {Ctx, Acc#tree_acc{names_set = Set2}}};
-ast({op, Op, In1, In2, In3}, {Ctx, Acc}) ->
-    {Out1, _, #tree_acc{names_set = Set1}} = p_t(In1, Ctx, Acc),
-    {Out2, _, #tree_acc{names_set = Set2}} = p_t(In2, Ctx, Acc#tree_acc{names_set = Set1}),
-    {Out3, _, #tree_acc{names_set = Set3}} = p_t(In3, Ctx, Acc#tree_acc{names_set = Set2}),
-    {{erlyjs_operators:ast(Op, Out1, Out2, Out3), #ast_inf{}}, {Ctx, Acc#tree_acc{names_set = Set3}}}; 
-ast({assign, {'=', _}, {identifier, _, Name}, In1}, {Ctx, Acc}) ->  
-    {{Out2, _}, {_, Acc1}} = var_ast(Name, Ctx#js_ctx{action = set}, Acc),  
-    {Out3, Inf, _} = p_t(In1, Ctx, Acc),  
-    assign_ast('=', Name, Out2, Out3, Inf, Ctx, Acc1);
-ast({assign, {Op, _}, {identifier, _, Name}, In1}, {Ctx, Acc}) ->  
-    {{Out2, _}, _} = var_ast(Name, Ctx, Acc),  
-    {Out3, Inf, Acc1} = p_t(In1, Ctx, Acc),    
-    {{Out4, _}, {_, Acc2}} = var_ast(Name, Ctx#js_ctx{action = set}, Acc1), 
-    assign_ast('=', Name, Out4, erlyjs_operators:ast(assign_to_op(Op), Out2, Out3), Inf, Ctx, Acc2);  
-ast({'if', Cond, If}, {#js_ctx{global = true} = Ctx, Acc}) -> 
-    {OutCond, _, #tree_acc{names_set = Set}} = p_t(Cond, Ctx, Acc),
-    Acc2 = Acc#tree_acc{names_set = Set, var_pairs = add_var_pairs(Acc)},
-    {OutStmt, _, Acc3} = p_t(If, Ctx, Acc2),
-    ReturnVarsElse = get_vars_init(Acc, Acc3, Ctx),                                        
+    {Out1, _, #trav{names_set = Set1}} = p_t(In1, Ctx, Trav),
+    {Out2, _, #trav{names_set = Set2}} = p_t(In2, Ctx, Trav#trav{names_set = Set1}),
+    {{erlyjs_operators:ast(Op, Out1, Out2), #ast_inf{}}, {Ctx, Trav#trav{names_set = Set2}}};
+ast({op, Op, In1, In2, In3}, {Ctx, Trav}) ->
+    {Out1, _, #trav{names_set = Set1}} = p_t(In1, Ctx, Trav),
+    {Out2, _, #trav{names_set = Set2}} = p_t(In2, Ctx, Trav#trav{names_set = Set1}),
+    {Out3, _, #trav{names_set = Set3}} = p_t(In3, Ctx, Trav#trav{names_set = Set2}),
+    {{erlyjs_operators:ast(Op, Out1, Out2, Out3), #ast_inf{}}, {Ctx, Trav#trav{names_set = Set3}}}; 
+ast({assign, {'=', _}, {identifier, _, Name}, In1}, {Ctx, Trav}) ->  
+    {{Out2, _}, {_, Trav1}} = var_ast(Name, Ctx#js_ctx{action = set}, Trav),  
+    {Out3, Inf, _} = p_t(In1, Ctx, Trav),  
+    assign_ast('=', Name, Out2, Out3, Inf, Ctx, Trav1);
+ast({assign, {Op, _}, {identifier, _, Name}, In1}, {Ctx, Trav}) ->  
+    {{Out2, _}, _} = var_ast(Name, Ctx, Trav),  
+    {Out3, Inf, Trav1} = p_t(In1, Ctx, Trav),    
+    {{Out4, _}, {_, Trav2}} = var_ast(Name, Ctx#js_ctx{action = set}, Trav1), 
+    assign_ast('=', Name, Out4, erlyjs_operators:ast(assign_to_op(Op), Out2, Out3), Inf, Ctx, Trav2);  
+ast({'if', Cond, If}, {#js_ctx{global = true} = Ctx, Trav}) -> 
+    {OutCond, _, #trav{names_set = Set}} = p_t(Cond, Ctx, Trav),
+    Trav2 = Trav#trav{names_set = Set, names = add_names(Trav)},
+    {OutStmt, _, Trav3} = p_t(If, Ctx, Trav2),
+    ReturnVarsElse = get_vars_init(Trav, Trav3, Ctx),                                        
     Ast = erl_syntax:case_expr(OutCond, [
         erl_syntax:clause([erl_syntax:atom(true)], none, [OutStmt]),
         erl_syntax:clause([erl_syntax:underscore()], none, [ReturnVarsElse])]),
-    {{[], #ast_inf{global_asts = [Ast]}}, {Ctx, acc_clean(Acc3)}};    
-ast({'if', Cond, If}, {Ctx, Acc}) -> 
-    {OutCond, _, #tree_acc{names_set = Set}} = p_t(Cond, Ctx, Acc),
-    Acc2 = Acc#tree_acc{names_set = Set, var_pairs = add_var_pairs(Acc)},
-    {OutIf, _, Acc3} = p_t(If, Ctx, Acc2),
-    ReturnVarsIf = get_vars_snapshot(Acc3),    
-    ReturnVarsElse = get_vars_init(Acc, Acc3, Ctx),
-    {Vars, Acc4} =  get_vars_result(Acc3, Acc3, Ctx),                                         
+    {{[], #ast_inf{global_asts = [Ast]}}, {Ctx, trav_clean(Trav3)}};    
+ast({'if', Cond, If}, {Ctx, Trav}) -> 
+    {OutCond, _, #trav{names_set = Set}} = p_t(Cond, Ctx, Trav),
+    Trav2 = Trav#trav{names_set = Set, names = add_names(Trav)},
+    {OutIf, _, Trav3} = p_t(If, Ctx, Trav2),
+    ReturnVarsIf = get_vars_snapshot(Trav3),    
+    ReturnVarsElse = get_vars_init(Trav, Trav3, Ctx),
+    {Vars, Trav4} =  get_vars_result(Trav3, Trav3, Ctx),                                         
     Ast = erl_syntax:case_expr(OutCond, [
         erl_syntax:clause([erl_syntax:atom(true)], none, append_asts(OutIf, ReturnVarsIf)),
         erl_syntax:clause([erl_syntax:underscore()], none, [ReturnVarsElse])]),
     Ast2 = erl_syntax:match_expr(Vars, Ast),
-    {{Ast2, #ast_inf{}}, {Ctx, acc_clean(Acc4)}};
+    {{Ast2, #ast_inf{}}, {Ctx, trav_clean(Trav4)}};
 ast({'if', Cond, If, Else}, {Ctx, Acc}) -> 
     %% TODO: refactor and handle global scope
-    {OutCond, _, #tree_acc{names_set = Set}} = parse_transform(Cond, Ctx, Acc),
+    {OutCond, _, #trav{names_set = Set}} = parse_transform(Cond, Ctx, Acc),
     
-    AccOutIfIn = Acc#tree_acc{names_set = Set, var_pairs = add_var_pairs(Acc)},
-    {OutIf, _, #tree_acc{names_set = Set1} = Acc1} = parse_transform(If, Ctx, AccOutIfIn), 
+    AccOutIfIn = Acc#trav{names_set = Set, names = add_names(Acc)},
+    {OutIf, _, #trav{names_set = Set1} = Acc1} = parse_transform(If, Ctx, AccOutIfIn), 
     
-    AccOutElseIn = Acc#tree_acc{names_set = Set1, var_pairs = add_var_pairs(Acc)},
+    AccOutElseIn = Acc#trav{names_set = Set1, names = add_names(Acc)},
     {OutElse, _, Acc2} = parse_transform(Else, Ctx, AccOutElseIn),
     
     KeyList = lists:usort([ Key || {Key, _} <- lists:append([
-        dict:to_list(hd(Acc1#tree_acc.var_pairs)), 
-        dict:to_list(hd(Acc2#tree_acc.var_pairs))])]),
+        dict:to_list(hd(Acc1#trav.names)), 
+        dict:to_list(hd(Acc2#trav.names))])]),
     %% ReturnVarsIf = get_vars(Acc, Acc1, Ctx),
     ReturnVarsIf = erl_syntax:tuple(lists:map(
         fun
             (Key) ->
-                case  dict:find(Key, hd(Acc1#tree_acc.var_pairs)) of
+                case  dict:find(Key, hd(Acc1#trav.names)) of
                     {ok, Val} ->
                        erl_syntax:variable(Val);
                     error ->
@@ -348,7 +347,7 @@ ast({'if', Cond, If, Else}, {Ctx, Acc}) ->
     ReturnVarsElse = erl_syntax:tuple(lists:map(
         fun
             (Key) ->
-                case  dict:find(Key, hd(Acc2#tree_acc.var_pairs)) of
+                case  dict:find(Key, hd(Acc2#trav.names)) of
                     {ok, Val} ->
                        erl_syntax:variable(Val);
                     error ->
@@ -368,287 +367,220 @@ ast({'if', Cond, If, Else}, {Ctx, Acc}) ->
         erl_syntax:clause([erl_syntax:atom(true)], none, append_asts(OutIf, ReturnVarsIf)),
         erl_syntax:clause([erl_syntax:underscore()], none, append_asts(OutElse, ReturnVarsElse))]),
     Ast2 = erl_syntax:match_expr(erl_syntax:tuple(Vars), Ast),
-    {{Ast2, #ast_inf{}}, {Ctx, acc_clean(Acc3)}};    
-ast({do_while, Stmt, Cond}, {#js_ctx{global = true} = Ctx, Acc}) ->   
-    {OutStmt, _, Acc2} = p_t(Stmt, Ctx, acc_prepare_func(Acc)),   
-    {OutCond, _, Acc3} = p_t(Cond, Ctx, Acc2),
+    {{Ast2, #ast_inf{}}, {Ctx, trav_clean(Acc3)}};    
+ast({do_while, Stmt, Cond}, {#js_ctx{global = true} = Ctx, Trav}) ->   
+    {OutStmt, _, Trav2} = p_t(Stmt, Ctx, trav_prepare_func(Trav)),   
+    {OutCond, _, Trav3} = p_t(Cond, Ctx, Trav2),
     AstFuncCond = erl_syntax:case_expr(OutCond, [
         erl_syntax:clause([erl_syntax:atom(true)], none,
-            [erl_syntax:application(none, func_name(Acc2), [])]),
+            [erl_syntax:application(none, func_name(Trav2), [])]),
         erl_syntax:clause([erl_syntax:underscore()], none,  
-            [get_global_vars(Acc2)])]),   
-    Func = erl_syntax:function(func_name(Acc2),
+            [get_global_vars(Trav2)])]),   
+    Func = erl_syntax:function(func_name(Trav2),
         [erl_syntax:clause([], none, append_asts(OutStmt, AstFuncCond))]),
-    Ast = erl_syntax:application(none, func_name(Acc2), []),
-    {{[], #ast_inf{internal_func_asts = [Func], global_asts = [Ast]}}, {Ctx, acc_clean(Acc3)}};
-ast({do_while, Stmt, Cond}, {Ctx, Acc}) ->       
-    {OutStmt, _, Acc2} = parse_transform(Stmt, Ctx, acc_prepare_func(Acc)),   
-    {OutCond, _, Acc3} = parse_transform(Cond, Ctx, Acc2),
-    VarsBefore = get_vars_init(Acc, Acc2, Ctx),
-    VarsAfterStmt = get_vars_snapshot(Acc2),
-    {VarsAfter, Acc4} = get_vars_result(Acc2, Acc3, Ctx),    
+    Ast = erl_syntax:application(none, func_name(Trav2), []),
+    {{[], #ast_inf{internal_func_asts = [Func], global_asts = [Ast]}}, {Ctx, trav_clean(Trav3)}};
+ast({do_while, Stmt, Cond}, {Ctx, Trav}) ->       
+    {OutStmt, _, Trav2} = parse_transform(Stmt, Ctx, trav_prepare_func(Trav)),   
+    {OutCond, _, Trav3} = parse_transform(Cond, Ctx, Trav2),
+    VarsBefore = get_vars_init(Trav, Trav2, Ctx),
+    VarsAfterStmt = get_vars_snapshot(Trav2),
+    {VarsAfter, Trav4} = get_vars_result(Trav2, Trav3, Ctx),    
     AstFuncCond = erl_syntax:case_expr(OutCond, [
         erl_syntax:clause([erl_syntax:atom(true)], none,
-            [erl_syntax:application(none, func_name(Acc2), [VarsAfterStmt])]),
+            [erl_syntax:application(none, func_name(Trav2), [VarsAfterStmt])]),
         erl_syntax:clause([erl_syntax:underscore()], none,  
             [VarsAfterStmt])]),
-    Func = erl_syntax:function(func_name(Acc2),
+    Func = erl_syntax:function(func_name(Trav2),
         [erl_syntax:clause([VarsBefore], none, append_asts(OutStmt, AstFuncCond))]),
     Ast = erl_syntax:match_expr(VarsAfter, 
-        erl_syntax:application(none, func_name(Acc2), [VarsBefore])),  
-    {{[Ast], #ast_inf{internal_func_asts = [Func]}}, {Ctx, acc_clean(Acc4)}};       
-ast({while, Cond, Stmt}, {#js_ctx{global = true} = Ctx, Acc}) ->        
-    {OutCond, _, #tree_acc{names_set = Set}} = p_t(Cond, Ctx, Acc),
-    Acc2 = Acc#tree_acc{
+        erl_syntax:application(none, func_name(Trav2), [VarsBefore])),  
+    {{[Ast], #ast_inf{internal_func_asts = [Func]}}, {Ctx, trav_clean(Trav4)}};       
+ast({while, Cond, Stmt}, {#js_ctx{global = true} = Ctx, Trav}) ->        
+    {OutCond, _, #trav{names_set = Set}} = p_t(Cond, Ctx, Trav),
+    Trav2 = Trav#trav{
         names_set = Set, 
-        var_pairs = add_var_pairs(Acc),
-        func_counter = wrap_inc_func_counter(Acc)},
-    {OutStmt, _, Acc3} = p_t(Stmt, Ctx, Acc2),
+        names = add_names(Trav),
+        func_counter = wrap_inc_func_counter(Trav)},
+    {OutStmt, _, Trav3} = p_t(Stmt, Ctx, Trav2),
     AstFuncCond = erl_syntax:case_expr(OutCond, [
         erl_syntax:clause([erl_syntax:atom(true)], none,
-            append_asts(OutStmt, erl_syntax:application(none, func_name(Acc3), []))),
+            append_asts(OutStmt, erl_syntax:application(none, func_name(Trav3), []))),
         erl_syntax:clause([erl_syntax:underscore()], none,  
-            [get_global_vars(Acc3)])]),    
-    Func = erl_syntax:function(func_name(Acc3),
+            [get_global_vars(Trav3)])]),    
+    Func = erl_syntax:function(func_name(Trav3),
         [erl_syntax:clause([], none, [AstFuncCond])]),
-    Ast = erl_syntax:application(none, func_name(Acc3), []),        
-    {{[], #ast_inf{internal_func_asts = [Func], global_asts = [Ast]}}, {Ctx, acc_clean(Acc3)}};      
-ast({while, Cond, Stmt}, {Ctx, Acc}) ->
-    {OutCond, _, #tree_acc{names_set = Set}} = parse_transform(Cond, Ctx, Acc),
-    Acc2 = Acc#tree_acc{
+    Ast = erl_syntax:application(none, func_name(Trav3), []),        
+    {{[], #ast_inf{internal_func_asts = [Func], global_asts = [Ast]}}, {Ctx, trav_clean(Trav3)}};      
+ast({while, Cond, Stmt}, {Ctx, Trav}) ->
+    {OutCond, _, #trav{names_set = Set}} = parse_transform(Cond, Ctx, Trav),
+    Trav2 = Trav#trav{
         names_set = Set, 
-        var_pairs = add_var_pairs(Acc),
-        func_counter = wrap_inc_func_counter(Acc)},
-    {OutStmt, _, Acc3} = p_t(Stmt, Ctx, Acc2),
-    VarsBefore = get_vars_init(Acc, Acc3, Ctx),
-    VarsAfterStmt = get_vars_snapshot(Acc3),
-    {VarsAfter, Acc4} = get_vars_result(Acc3, Acc3, Ctx),    
+        names = add_names(Trav),
+        func_counter = wrap_inc_func_counter(Trav)},
+    {OutStmt, _, Trav3} = p_t(Stmt, Ctx, Trav2),
+    VarsBefore = get_vars_init(Trav, Trav3, Ctx),
+    VarsAfterStmt = get_vars_snapshot(Trav3),
+    {VarsAfter, Trav4} = get_vars_result(Trav3, Trav3, Ctx),    
     AstFuncCond = erl_syntax:case_expr(OutCond, [
         erl_syntax:clause([erl_syntax:atom(true)], none,
-            append_asts(OutStmt, erl_syntax:application(none, func_name(Acc2), [VarsAfterStmt]))),
+            append_asts(OutStmt, erl_syntax:application(none, func_name(Trav2), [VarsAfterStmt]))),
         erl_syntax:clause([erl_syntax:underscore()], none,  
             [VarsBefore])]),          
-    Func = erl_syntax:function(func_name(Acc2),
+    Func = erl_syntax:function(func_name(Trav2),
         [erl_syntax:clause([VarsBefore], none, [AstFuncCond])]),
     Ast = erl_syntax:match_expr(VarsAfter, 
-        erl_syntax:application(none, func_name(Acc3), [VarsBefore])),           
-    {{[Ast], #ast_inf{internal_func_asts = [Func]}}, {Ctx, acc_clean(Acc4)}};
-ast({for, Init, Cond, Final, Stmt}, {#js_ctx{global = true} = Ctx, Acc}) -> 
-    {OutInit, _, Acc2} = p_t(Init, Ctx, Acc),   
-    {OutCond, _, Acc3} = p_t(Cond, Ctx, acc_prepare_func(Acc2)),
-    {OutStmt, _, Acc4} = p_t(Stmt, Ctx, Acc3),                
-    {FinalExpr, _, Acc5} = p_t(Final, Ctx, Acc4),
-    Stmts = append_asts(OutStmt, FinalExpr), %%% only works with full assignment expression as FinalExpr 
+        erl_syntax:application(none, func_name(Trav3), [VarsBefore])),           
+    {{[Ast], #ast_inf{internal_func_asts = [Func]}}, {Ctx, trav_clean(Trav4)}};
+ast({for, Init, Cond, Final, Stmt}, {#js_ctx{global = true} = Ctx, Trav}) -> 
+    {OutInit, _, Trav2} = p_t(Init, Ctx, Trav),   
+    {OutCond, _, Trav3} = p_t(Cond, Ctx, trav_prepare_func(Trav2)),
+    {OutStmt, _, Trav4} = p_t(Stmt, Ctx, Trav3),                
+    {FinalExpr, _, Trav5} = p_t(Final, Ctx, Trav4),
+    Stmts = append_asts(OutStmt, FinalExpr), %%% currently only works with full assignment expression as FinalExpr 
     AstFuncCond = erl_syntax:case_expr(OutCond, [
         erl_syntax:clause([erl_syntax:atom(true)], none,
-            append_asts(Stmts, erl_syntax:application(none, func_name(Acc4), []))),
+            append_asts(Stmts, erl_syntax:application(none, func_name(Trav3), []))),
         erl_syntax:clause([erl_syntax:underscore()], none,  
-            [get_global_vars(Acc4)])]),   
-    Func = erl_syntax:function(func_name(Acc4),
+            [get_global_vars(Trav4)])]),   
+    Func = erl_syntax:function(func_name(Trav4),
         [erl_syntax:clause([], none, [AstFuncCond])]),
-    Ast = erl_syntax:application(none, func_name(Acc4), []),                    
-    {{[], #ast_inf{internal_func_asts = [Func], global_asts = append_asts(Ast, OutInit)}}, {Ctx, acc_clean(Acc4)}};
-ast({for, Init, Cond, Final, Stmt}, {Ctx, Acc}) -> 
-    {OutInit, _, Acc2} = p_t(Init, Ctx, Acc),
-    {OutCond, _, Acc3} = p_t(Cond, Ctx, acc_prepare_func(Acc2)),
-    {OutStmt, _, Acc4} = p_t(Stmt, Ctx, Acc3),                
-    {FinalExpr, _, Acc5} = p_t(Final, Ctx, Acc4),
-    VarsBefore = get_vars_init(Acc2, Acc5, Ctx),
-    VarsAfterStmt = get_vars_snapshot(Acc5),
-    {VarsAfter, Acc6} = get_vars_result(Acc5, Acc5, Ctx),
-    Stmts = append_asts(OutStmt, FinalExpr), %%% only works with full assignment expression as FinalExpr
+    Ast = erl_syntax:application(none, func_name(Trav3), []),                    
+    {{[], #ast_inf{internal_func_asts = [Func], global_asts = append_asts(Ast, OutInit)}}, {Ctx, trav_clean(Trav5)}};
+ast({for, Init, Cond, Final, Stmt}, {Ctx, Trav}) -> 
+    {OutInit, _, Trav2} = p_t(Init, Ctx, Trav),
+    {OutCond, _, Trav3} = p_t(Cond, Ctx, trav_prepare_func(Trav2)),
+    {OutStmt, _, Trav4} = p_t(Stmt, Ctx, Trav3),                
+    {FinalExpr, _, Trav5} = p_t(Final, Ctx, Trav4),
+    VarsBefore = get_vars_init(Trav2, Trav5, Ctx),
+    VarsAfterStmt = get_vars_snapshot(Trav5),
+    {VarsAfter, Trav6} = get_vars_result(Trav5, Trav5, Ctx),
+    Stmts = append_asts(OutStmt, FinalExpr), %%% currently only works with full assignment expression as FinalExpr
     AstFuncCond = erl_syntax:case_expr(OutCond, [
         erl_syntax:clause([erl_syntax:atom(true)], none,
-            append_asts(Stmts, erl_syntax:application(none, func_name(Acc4), [VarsAfterStmt]))),
+            append_asts(Stmts, erl_syntax:application(none, func_name(Trav3), [VarsAfterStmt]))),
         erl_syntax:clause([erl_syntax:underscore()], none,  
             [VarsBefore])]),
-    Func = erl_syntax:function(func_name(Acc4),
+    Func = erl_syntax:function(func_name(Trav3),
         [erl_syntax:clause([VarsBefore], none, [AstFuncCond])]),
     Ast = erl_syntax:match_expr(VarsAfter, 
-        erl_syntax:application(none, func_name(Acc5), [VarsBefore])),    
-    {{append_asts(OutInit, Ast), #ast_inf{internal_func_asts = [Func]}}, {Ctx, acc_clean(Acc6)}};
-ast({switch, Cond, CaseList, {_, DefaultStmts}}, {#js_ctx{global = true} = Ctx, Acc}) -> 
+        erl_syntax:application(none, func_name(Trav5), [VarsBefore])),    
+    {{append_asts(OutInit, Ast), #ast_inf{internal_func_asts = [Func]}}, {Ctx, trav_clean(Trav6)}};
+ast({switch, Cond, CaseList, {_, DefaultStmts}}, {#js_ctx{global = true} = Ctx, Trav}) -> 
    %% TODO: implement global scope   
-   empty_ast(Ctx, Acc);             
-ast({switch, Cond, CaseList, {_, DefaultStmts}}, {Ctx, Acc}) ->  
-    %% TODO: refactor     
-    {Cond2, _, Acc2} = p_t(Cond, Ctx, Acc),      
-    {List, Acc3} = lists:mapfoldl(   
-        fun      
-            ({default, StmtsIn}, AccIn) ->  
-                AccIn2 = acc_reset(AccIn),
-                LabelOut = erl_syntax:underscore(),
-                {StmtsOut, _, AccOut} = p_t(StmtsIn, Ctx, AccIn2), 
-                VarPairs = dict:to_list(hd(AccOut#tree_acc.var_pairs)),               
-                {{LabelOut, none, StmtsOut, VarPairs, AccOut}, AccOut};                
-            ({[LabelIn], StmtsIn}, AccIn) -> 
-                AccIn2 = acc_reset(AccIn),
-                case lists:last(StmtsIn) of    
-                    {break, _} ->                       
-                        StmtsIn2 = lists:reverse(tl(lists:reverse(StmtsIn))), 
-                        {LabelOut, _, _} = p_t(LabelIn, Ctx, AccIn2),   
-                        {StmtsOut, _, AccOut} = p_t(StmtsIn2, Ctx, AccIn2),
-                        VarPairs = dict:to_list(hd(AccOut#tree_acc.var_pairs)),                                       
-                        {{LabelOut, none, StmtsOut, VarPairs, AccOut}, AccOut};
-                     _ ->
-                         exit(not_implemented_yet) 
-                end;
-            ({LabelsIn, StmtsIn}, AccIn) ->     
-                AccIn2 = acc_reset(AccIn),
-                case lists:last(StmtsIn) of    
-                    {break, _} ->                       
-                        StmtsIn2 = lists:reverse(tl(lists:reverse(StmtsIn))),
-                        {LabelsOut, _, _} = p_t(LabelsIn, Ctx, AccIn2), 
-                        Guards = erl_syntax:disjunction(lists:map(
-                            fun
-                                (Label) -> 
-                                    Ast = erl_syntax:variable("X"),
-                                    erl_syntax:infix_expr(Ast, erl_syntax:operator('=='), Label)
-                            end, LabelsOut)), 
-                        {StmtsOut, _, AccOut} = p_t(StmtsIn2, Ctx, AccIn2),  
-                        VarPairs = dict:to_list(hd(AccOut#tree_acc.var_pairs)),          
-                        {{erl_syntax:variable("X"), Guards, StmtsOut, VarPairs, AccOut}, AccOut};
-                     _ ->
-                         exit(not_implemented_yet) 
-                end         
-        end, acc_prepare(Acc2), CaseList ++ [{default, DefaultStmts}]),       
-    KeyList = lists:usort([ Key || {Key, _} <- lists:flatten([ X || {_,_,_,X,_} <- List])]), 
-    AccList = [ X || {_,_,_,_,X} <- List],
-    StmtsReturnVarsList = lists:map(
-        fun
-            (X) ->
-                erl_syntax:tuple(lists:map(
-                fun
-                    (Key) ->
-                        case  dict:find(Key, hd(X#tree_acc.var_pairs)) of
-                            {ok, Val} ->
-                               erl_syntax:variable(Val);
-                            error ->
-                               {{Ast, _}, {_, _}} = var_ast(Key, Ctx, Acc),
-                               Ast
-                        end
-                end, KeyList))
-        end, AccList),   
-    {Vars, Acc4} = lists:mapfoldl(
-        fun
-            (Key, AccIn) ->
-               {{Ast, _}, {_, AccOut}} = var_ast(Key, Ctx#js_ctx{action = set}, AccIn),
-            {Ast, AccOut}
-        end,  Acc3, KeyList),                    
+   empty_ast(Ctx, Trav);             
+ast({switch, Cond, CaseList, {_, DefaultStmts}}, {Ctx, Trav}) ->       
+    {Cond2, _, Trav2} = p_t(Cond, Ctx, Trav),   
+    {List, Trav3} =  get_clause_list(
+        CaseList ++ [{default, DefaultStmts}], trav_prepare(Trav2), Ctx),     
+    NameList = lists:usort(lists:flatten([ X || {_,_,_,X,_} <- List])),   
+    TravList = [ X || {_,_,_,_,X} <- List],
+    StmtsReturnVarsList = get_vars_list(NameList, TravList, Trav, Ctx),
+    {Vars, Trav4} =  get_vars_result(NameList, Trav3, Trav3, Ctx),                  
     Clauses =  lists:map(
         fun
             ({{Label, Guard, Stmts, _, _}, StmtsReturnVars}) ->
                 erl_syntax:clause([Label], Guard, append_asts(Stmts, StmtsReturnVars))
         end, lists:zip(List, StmtsReturnVarsList)),                                                              
-    Ast = erl_syntax:match_expr(erl_syntax:tuple(Vars), erl_syntax:case_expr(Cond2, Clauses)),      
-    {{Ast, #ast_inf{}}, {Ctx, acc_clean(Acc4)}};
+    Ast = erl_syntax:match_expr(Vars, erl_syntax:case_expr(Cond2, Clauses)),      
+    {{Ast, #ast_inf{}}, {Ctx, trav_clean(Trav4)}};
 ast(Unknown, _) ->  
     throw({error, lists:concat(["Unknown token: ", Unknown])}). 
     
     
-empty_ast(Ctx, Acc) ->
+empty_ast(Ctx, Trav) ->
     io:format("TRACE ~p:~p ~p~n",[?MODULE, ?LINE, "empty_ast might currently cause exit"]),
-    {{[], #ast_inf{}}, {Ctx, Acc}}.  
+    {{[], #ast_inf{}}, {Ctx, Trav}}.  
  
  
-func_name(Acc) ->
-    erl_syntax:atom(lists:concat(["func_", Acc#tree_acc.func_counter])).
-    
- 
-%%  TODO:
-%% 
-%% fun_var_ast(Acc) ->
-%%     ErlName = erl_syntax_lib:new_variable_name(Acc#tree_acc.names_set),
-%%     Acc2 = Acc#tree_acc{names_set = sets:add_element(ErlName, Acc#tree_acc.names_set)},
-%%     {erl_syntax:variable(ErlName), Acc2}.
-    
+func_name(Trav) ->
+    erl_syntax:atom(lists:concat(["func_", Trav#trav.func_counter])).
       
-var_ast(Key, #js_ctx{action = set} = Ctx, Acc) ->
-    Scope = hd(Acc#tree_acc.js_scopes),
-    ErlName = erl_syntax_lib:new_variable_name(Acc#tree_acc.names_set), 
+      
+var_ast(Key, #js_ctx{action = set} = Ctx, Trav) ->
+    Scope = hd(Trav#trav.js_scopes),
+    ErlName = erl_syntax_lib:new_variable_name(Trav#trav.names_set), 
     Dict = dict:store(Key, ErlName, Scope#scope.names_dict),
-    VarPairs = case Acc#tree_acc.var_pairs of
+    Names = case Trav#trav.names of
         [] ->
             [];
         Val ->
             [dict:store(Key, ErlName, hd(Val)) | tl(Val)]
     end,
-    Acc1 = Acc#tree_acc{names_set = sets:add_element(ErlName, Acc#tree_acc.names_set), 
-        js_scopes = [#scope{names_dict = Dict} | tl(Acc#tree_acc.js_scopes)],
-        var_pairs = VarPairs},
-    {{erl_syntax:variable(ErlName), #ast_inf{}}, {Ctx, Acc1}}; 
+    Trav1 = Trav#trav{names_set = sets:add_element(ErlName, Trav#trav.names_set), 
+        js_scopes = [#scope{names_dict = Dict} | tl(Trav#trav.js_scopes)],
+        names = Names},
+    {{erl_syntax:variable(ErlName), #ast_inf{}}, {Ctx, Trav1}}; 
     
-var_ast(undefined, #js_ctx{action = get} = Ctx, Acc) ->
-    {{erl_syntax:atom(undefined), #ast_inf{}}, {Ctx, Acc}};
-var_ast('Infinity', #js_ctx{action = get} = Ctx, Acc) ->
-    {{erl_syntax:atom('Infinity'), #ast_inf{}}, {Ctx, Acc}};
-var_ast('NaN', #js_ctx{action = get} = Ctx, Acc) ->
-    {{erl_syntax:atom('NaN'), #ast_inf{}}, {Ctx, Acc}};        
-var_ast(Key, #js_ctx{action = get} = Ctx, Acc) ->
-    case name_search(Key, Acc#tree_acc.js_scopes, []) of
+var_ast(undefined, #js_ctx{action = get} = Ctx, Trav) ->
+    {{erl_syntax:atom(undefined), #ast_inf{}}, {Ctx, Trav}};
+var_ast('Infinity', #js_ctx{action = get} = Ctx, Trav) ->
+    {{erl_syntax:atom('Infinity'), #ast_inf{}}, {Ctx, Trav}};
+var_ast('NaN', #js_ctx{action = get} = Ctx, Trav) ->
+    {{erl_syntax:atom('NaN'), #ast_inf{}}, {Ctx, Trav}};        
+var_ast(Key, #js_ctx{action = get} = Ctx, Trav) ->
+    case name_search(Key, Trav#trav.js_scopes, []) of
         not_found ->
             throw({error, lists:concat(["ReferenceError: ", Key, " is not defined"])});
         {global, Name} ->
             Args = [erl_syntax:atom(Name)], 
             Ast = erl_syntax:application(none, erl_syntax:atom(get), Args),
-            {{Ast, #ast_inf{}}, {Ctx, Acc}};
+            {{Ast, #ast_inf{}}, {Ctx, Trav}};
         Name ->
-            {{erl_syntax:variable(Name), #ast_inf{}}, {Ctx, Acc}}
+            {{erl_syntax:variable(Name), #ast_inf{}}, {Ctx, Trav}}
     end.
 
-var_declare(Key, [], Ctx, #tree_acc{js_scopes = [GlobalScope]}=Acc) ->      
+var_declare(Key, [], Ctx, #trav{js_scopes = [GlobalScope]}=Trav) ->      
     Dict = dict:store(Key, global_prefix(Key), GlobalScope#scope.names_dict),
     Args = [erl_syntax:atom(global_prefix(Key)), erl_syntax:atom(undefined)], 
     Ast = erl_syntax:application(none, erl_syntax:atom(put), Args),
-    Acc2 = Acc#tree_acc{js_scopes=[#scope{names_dict = Dict}]}, 
-    {{Ast,  #ast_inf{}}, {Ctx, Acc2}};    
-var_declare(Key, {identifier, _, undefined}, Ctx,  #tree_acc{js_scopes = [_]}=Acc) -> 
-    {_, {_, Acc2}}  = var_ast(Key, Ctx, Acc),
+    Trav2 = Trav#trav{js_scopes=[#scope{names_dict = Dict}]}, 
+    {{Ast,  #ast_inf{}}, {Ctx, Trav2}};    
+var_declare(Key, {identifier, _, undefined}, Ctx,  #trav{js_scopes = [_]}=Trav) -> 
+    {_, {_, Trav2}}  = var_ast(Key, Ctx, Trav),
     Args = [erl_syntax:atom(global_prefix(Key)), erl_syntax:atom(undefined)], 
     Ast = erl_syntax:application(none, erl_syntax:atom(put), Args),
-    {{Ast,  #ast_inf{}}, {Ctx, Acc2}}; 
-var_declare(Key, {identifier, _, 'Infinity'}, Ctx,  #tree_acc{js_scopes = [_]}=Acc) -> 
-    {_, {_, Acc2}}  = var_ast(Key, Ctx, Acc),
+    {{Ast,  #ast_inf{}}, {Ctx, Trav2}}; 
+var_declare(Key, {identifier, _, 'Infinity'}, Ctx,  #trav{js_scopes = [_]}=Trav) -> 
+    {_, {_, Trav2}}  = var_ast(Key, Ctx, Trav),
     Args = [erl_syntax:atom(global_prefix(Key)), erl_syntax:atom('Infinity')], 
     Ast = erl_syntax:application(none, erl_syntax:atom(put), Args),
-    {{Ast,  #ast_inf{}}, {Ctx, Acc2}};    
-var_declare(Key, {identifier, _, 'NaN'}, Ctx,  #tree_acc{js_scopes = [_]}=Acc) -> 
-    {_, {_, Acc2}}  = var_ast(Key, Ctx, Acc),
+    {{Ast,  #ast_inf{}}, {Ctx, Trav2}};    
+var_declare(Key, {identifier, _, 'NaN'}, Ctx,  #trav{js_scopes = [_]}=Trav) -> 
+    {_, {_, Trav2}}  = var_ast(Key, Ctx, Trav),
     Args = [erl_syntax:atom(global_prefix(Key)), erl_syntax:atom('NaN')], 
     Ast = erl_syntax:application(none, erl_syntax:atom(put), Args),
-    {{Ast,  #ast_inf{}}, {Ctx, Acc2}};           
-var_declare(Key, Value, Ctx,  #tree_acc{js_scopes = [GlobalScope]}=Acc) ->      
+    {{Ast,  #ast_inf{}}, {Ctx, Trav2}};           
+var_declare(Key, Value, Ctx,  #trav{js_scopes = [GlobalScope]}=Trav) ->      
     Dict = dict:store(Key, global_prefix(Key), GlobalScope#scope.names_dict),
-    Acc2 = Acc#tree_acc{js_scopes=[#scope{names_dict = Dict}]},
-    {ValueAst, Inf, Acc2} = parse_transform(Value, Ctx, Acc2),
+    Trav2 = Trav#trav{js_scopes=[#scope{names_dict = Dict}]},
+    {ValueAst, Inf, Trav2} = parse_transform(Value, Ctx, Trav2),
     Args = [erl_syntax:atom(global_prefix(Key)), ValueAst], 
-    Ast = erl_syntax:application(none, erl_syntax:atom(put), Args), 
-    %% Ast = [Ast | Inf#ast_inf.global_asts],
-    %% {{Ast,  #ast_inf{}}, {Ctx, Acc2}}; 
-    {{append_asts(Inf#ast_inf.global_asts, Ast),  #ast_inf{}}, {Ctx, Acc2}};  
-var_declare(Key, [], Ctx, Acc) ->
-    {{AstVariable, _}, {_, Acc2}}  = var_ast(Key, Ctx, Acc),
+    Ast = erl_syntax:application(none, erl_syntax:atom(put), Args),  
+    {{append_asts(Inf#ast_inf.global_asts, Ast),  #ast_inf{}}, {Ctx, Trav2}};  
+var_declare(Key, [], Ctx, Trav) ->
+    {{AstVariable, _}, {_, Trav2}}  = var_ast(Key, Ctx, Trav),
     Ast = erl_syntax:match_expr(AstVariable, erl_syntax:atom(undefined)),  
-    {{Ast, #ast_inf{}}, {Ctx, Acc2}};  
-var_declare(Key, {identifier, _, undefined}, Ctx, Acc) ->
-    {{AstVar, Inf}, {_, Acc2}}  = var_ast(Key, Ctx, Acc), 
-    {{erl_syntax:match_expr(AstVar, erl_syntax:atom(undefined)), Inf}, {Ctx, Acc2}};
-var_declare(Key, {identifier, _, 'Infinity'}, Ctx, Acc) ->
-    {{AstVar, Inf}, {_, Acc2}}  = var_ast(Key, Ctx, Acc), 
-    {{erl_syntax:match_expr(AstVar, erl_syntax:atom('Infinity')), Inf}, {Ctx, Acc2}};
-var_declare(Key, {identifier, _, 'NaN'}, Ctx, Acc) ->
-    {{AstVar, Inf}, {_, Acc2}}  = var_ast(Key, Ctx, Acc), 
-    {{erl_syntax:match_expr(AstVar, erl_syntax:atom('NaN')), Inf}, {Ctx, Acc2}};                        
-var_declare(Key, Value, Ctx, Acc) ->
-    {{AstVariable, _}, {_, Acc2}}  = var_ast(Key, Ctx, Acc),
-    {AstValue, Inf, Acc3} = parse_transform(Value, Ctx, Acc2),
+    {{Ast, #ast_inf{}}, {Ctx, Trav2}};  
+var_declare(Key, {identifier, _, undefined}, Ctx, Trav) ->
+    {{AstVar, Inf}, {_, Trav2}}  = var_ast(Key, Ctx, Trav), 
+    {{erl_syntax:match_expr(AstVar, erl_syntax:atom(undefined)), Inf}, {Ctx, Trav2}};
+var_declare(Key, {identifier, _, 'Infinity'}, Ctx, Trav) ->
+    {{AstVar, Inf}, {_, Trav2}}  = var_ast(Key, Ctx, Trav), 
+    {{erl_syntax:match_expr(AstVar, erl_syntax:atom('Infinity')), Inf}, {Ctx, Trav2}};
+var_declare(Key, {identifier, _, 'NaN'}, Ctx, Trav) ->
+    {{AstVar, Inf}, {_, Trav2}}  = var_ast(Key, Ctx, Trav), 
+    {{erl_syntax:match_expr(AstVar, erl_syntax:atom('NaN')), Inf}, {Ctx, Trav2}};                        
+var_declare(Key, Value, Ctx, Trav) ->
+    {{AstVariable, _}, {_, Trav2}}  = var_ast(Key, Ctx, Trav),
+    {AstValue, Inf, Trav3} = parse_transform(Value, Ctx, Trav2),
     Ast = erl_syntax:match_expr(AstVariable, AstValue),  
-    {{Ast, Inf}, {Ctx, Acc3}}.
+    {{Ast, Inf}, {Ctx, Trav3}}.
     
   
 name_search(_, [], _) ->
     not_found;
-name_search(Key, [H | T], Acc) ->
+name_search(Key, [H | T], Trav) ->
     case dict:find(Key, H#scope.names_dict) of
         {ok, Value} ->
             case T of
@@ -656,67 +588,110 @@ name_search(Key, [H | T], Acc) ->
                     {global, global_prefix(Key)};
                 _ -> Value
             end;
-        error -> name_search(Key, T, [H | Acc]) 
+        error -> name_search(Key, T, [H | Trav]) 
     end.
 
 
-get_vars_init(Acc1, Acc2, Ctx) ->
+get_vars_init(Trav1, Trav2, Ctx) ->
     erl_syntax:tuple(dict:fold(
         fun
-            (Key, _, AccIn) -> 
-                {{Ast, _}, {_, _}} = var_ast(Key, Ctx, Acc1),
-                [Ast| AccIn]
-        end, [], hd(Acc2#tree_acc.var_pairs))).
+            (Key, _, AccTravIn) -> 
+                {{Ast, _}, {_, _}} = var_ast(Key, Ctx, Trav1),
+                [Ast| AccTravIn]
+        end, [], hd(Trav2#trav.names))).
             
 
-get_vars_snapshot(Acc) ->                    
+get_vars_snapshot(Trav) ->                    
     erl_syntax:tuple(dict:fold(
         fun
-            (_, Val, AccIn) -> 
-                [erl_syntax:variable(Val) | AccIn]
-        end, [], hd(Acc#tree_acc.var_pairs))).
+            (_, Val, AccTravIn) -> 
+                [erl_syntax:variable(Val) | AccTravIn]
+        end, [], hd(Trav#trav.names))).  
+       
+        
+get_vars_list(NameList, TravList, Trav, Ctx) ->        
+    lists:map(
+      fun
+          (X) ->
+              erl_syntax:tuple(lists:map(
+              fun
+                  ({Key, _}) ->
+                      case  dict:find(Key, hd(X#trav.names)) of
+                          {ok, Val} ->
+                             erl_syntax:variable(Val);
+                          error ->
+                             {{Ast, _}, {_, _}} = var_ast(Key, Ctx, Trav),
+                             Ast
+                      end
+              end, NameList))
+      end, TravList).
         
 
-get_global_vars(Acc) ->
-    L = dict:to_list(hd(Acc#tree_acc.var_pairs)),
+get_global_vars(Trav) ->
+    L = dict:to_list(hd(Trav#trav.names)),
     erl_syntax:tuple([erl_syntax:application(none, erl_syntax:atom(get), 
         [erl_syntax:atom(global_prefix(Key))]) || {Key, _} <-  L]).
 
 
-
-%% TODO: 
-%%         
-%% get_vars(AccInit, AccSnapshot, Ctx) -> 
-%%     KeyList = lists:usort([ Key || {Key, _} <- lists:append([
-%%         dict:to_list(hd(AccInit#tree_acc.var_pairs)), 
-%%         dict:to_list(hd(AccSnapshot#tree_acc.var_pairs))])]),       
-%%     erl_syntax:tuple(lists:map(
-%%         fun
-%%             (Key) ->
-%%                 case  dict:find(Key, hd(AccSnapshot#tree_acc.var_pairs)) of
-%%                     {ok, Val} ->
-%%                        erl_syntax:variable(Val);
-%%                     error ->
-%%                        {{Ast, _}, {_, _}} = var_ast(Key, Ctx, AccInit),
-%%                        Ast
-%%                 end
-%%         end, KeyList)).
-
-
-get_vars_result(Acc, AccSet, Ctx) ->
-    AccInit = Acc#tree_acc{names_set = AccSet#tree_acc.names_set},        
-    {VarsAfter, Acc2} = lists:mapfoldl(
+get_vars_result(Trav, TravSet, Ctx) ->
+    get_vars_result(dict:to_list(hd(Trav#trav.names)), Trav, TravSet, Ctx).
+    
+get_vars_result(NameList, Trav, TravSet, Ctx) ->
+    TravInit = Trav#trav{names_set = TravSet#trav.names_set},        
+    {VarsAfter, Trav2} = lists:mapfoldl(
         fun
-            ({Key, _}, AccIn) ->
-                {{Ast, _}, {_, AccOut}} = var_ast(Key, Ctx#js_ctx{action = set}, AccIn),
-                {Ast, AccOut}
-            end,  AccInit, dict:to_list(hd(Acc#tree_acc.var_pairs))),  
-    {erl_syntax:tuple(VarsAfter), Acc2}.
+            ({Key, _}, AccTravIn) ->
+                {{Ast, _}, {_, AccTravOut}} = var_ast(Key, Ctx#js_ctx{action = set}, AccTravIn),
+                {Ast, AccTravOut}
+            end,  TravInit, NameList),  
+    {erl_syntax:tuple(VarsAfter), Trav2}.    
+    
+
+get_clause_list(CaseList, Trav, Ctx) ->
+    lists:mapfoldl(   
+        fun      
+            ({default, StmtsIn}, AccTravIn) ->  
+                AccTravIn2 = trav_reset(AccTravIn),
+                LabelOut = erl_syntax:underscore(),
+                {StmtsOut, _, AccTravOut} = p_t(StmtsIn, Ctx, AccTravIn2), 
+                Names = dict:to_list(hd(AccTravOut#trav.names)),               
+                {{LabelOut, none, StmtsOut, Names, AccTravOut}, AccTravOut};                
+            ({[LabelIn], StmtsIn}, AccTravIn) -> 
+                AccTravIn2 = trav_reset(AccTravIn),
+                case lists:last(StmtsIn) of    
+                    {break, _} ->                       
+                        StmtsIn2 = lists:reverse(tl(lists:reverse(StmtsIn))), 
+                        {LabelOut, _, _} = p_t(LabelIn, Ctx, AccTravIn2),   
+                        {StmtsOut, _, AccTravOut} = p_t(StmtsIn2, Ctx, AccTravIn2),
+                        Names = dict:to_list(hd(AccTravOut#trav.names)),                                       
+                        {{LabelOut, none, StmtsOut, Names, AccTravOut}, AccTravOut};
+                     _ ->
+                         exit(not_implemented_yet) 
+                end;
+            ({LabelsIn, StmtsIn}, AccTravIn) ->     
+                AccTravIn2 = trav_reset(AccTravIn),
+                case lists:last(StmtsIn) of    
+                    {break, _} ->                       
+                        StmtsIn2 = lists:reverse(tl(lists:reverse(StmtsIn))),
+                        {LabelsOut, _, _} = p_t(LabelsIn, Ctx, AccTravIn2), 
+                        Guards = erl_syntax:disjunction(lists:map(
+                            fun
+                                (Label) -> 
+                                    Ast = erl_syntax:variable("X"),
+                                    erl_syntax:infix_expr(Ast, erl_syntax:operator('=='), Label)
+                            end, LabelsOut)), 
+                        {StmtsOut, _, AccTravOut} = p_t(StmtsIn2, Ctx, AccTravIn2),  
+                        Names = dict:to_list(hd(AccTravOut#trav.names)),          
+                        {{erl_syntax:variable("X"), Guards, StmtsOut, Names, AccTravOut}, AccTravOut};
+                     _ ->
+                         exit(not_implemented_yet) 
+                end         
+        end, Trav, CaseList).
             
                        
-func(Name, Params, Body, Ctx, Acc) -> 
-    {Params1, _, _} = p_t(Params, Ctx, Acc),          
-    {Ast, Inf, _} = p_t(Body, Ctx, wrap_add_scope(Acc)),
+func(Name, Params, Body, Ctx, Trav) -> 
+    {Params1, _, _} = p_t(Params, Ctx, Trav),          
+    {Ast, Inf, _} = p_t(Body, Ctx, wrap_add_scope(Trav)),
     Ast1 = erl_syntax:function(erl_syntax:atom(global_prefix(Name)),
         [erl_syntax:clause(Params1, none, Ast)]),
     case Ctx#js_ctx.global of
@@ -724,17 +699,17 @@ func(Name, Params, Body, Ctx, Acc) ->
             Export = erl_syntax:arity_qualifier(erl_syntax:atom(global_prefix(Name)), 
                 erl_syntax:integer(length(Params))),
             Exports = [Export | Inf#ast_inf.export_asts], 
-            {{Ast1, Inf#ast_inf{export_asts = Exports}}, {Ctx, Acc}};
+            {{Ast1, Inf#ast_inf{export_asts = Exports}}, {Ctx, Trav}};
         _ ->
-            {{Ast1, Inf}, {Ctx, Acc}}
+            {{Ast1, Inf}, {Ctx, Trav}}
     end.
     
       
-call(Name, Args, Ctx, Acc) ->
+call(Name, Args, Ctx, Trav) ->
     Arity = length(Args),
     case native_global_func(Name, Arity) of
         ok ->     
-            {Args2, _, Acc2} = p_t(Args, Ctx, Acc),  
+            {Args2, _, Trav2} = p_t(Args, Ctx, Trav),  
             Ast = erl_syntax:application(erl_syntax:atom(erlyjs_global_funcs), 
                 erl_syntax:atom(Name), Args2),
             Ast2 = erl_syntax:case_expr(Ast, [
@@ -742,25 +717,25 @@ call(Name, Args, Ctx, Acc) ->
                 erl_syntax:clause([erl_syntax:tuple([erl_syntax:atom(ok), 
                     erl_syntax:variable("Val")])], none, [erl_syntax:variable("Val")]),
                 erl_syntax:clause([erl_syntax:underscore()], none, [erl_syntax:atom(error)])]),
-            maybe_global({{Ast2, #ast_inf{}}, {Ctx, Acc2}});
+            maybe_global({{Ast2, #ast_inf{}}, {Ctx, Trav2}});
         _ ->
             throw({error, lists:concat(["No such global function: ", 
                 Name, " (arity: ", Arity, ")"])})
     end.
 
 
-call(Name, Names, Args, Ctx, Acc) ->
+call(Name, Names, Args, Ctx, Trav) ->
     Arity = length(Args),
     case api_func(Name, Names, Arity) of
         {Module, Function} ->
-            {Args1, _, Acc1} = p_t(Args, Ctx, Acc),    
+            {Args1, _, Trav1} = p_t(Args, Ctx, Trav),    
             Ast = erl_syntax:application(erl_syntax:atom(Module), erl_syntax:atom(Function), Args1),
             Ast2 = erl_syntax:case_expr(Ast, [
                 erl_syntax:clause([erl_syntax:atom(ok)], none, [erl_syntax:atom(ok)]),
                 erl_syntax:clause([erl_syntax:tuple([erl_syntax:atom(ok), 
                     erl_syntax:variable("Val")])], none, [erl_syntax:variable("Val")]),
                 erl_syntax:clause([erl_syntax:underscore()], none, [erl_syntax:atom(error)])]),
-            maybe_global({{Ast2, #ast_inf{}}, {Ctx, Acc1}});
+            maybe_global({{Ast2, #ast_inf{}}, {Ctx, Trav1}});
         _ ->
             throw({error, lists:concat(["No such function: ", todo_prettyprint_functionname])})
     end.
@@ -785,24 +760,24 @@ api_func(_, _, _) -> false.
 build_api_func(Name, Func) -> {lists:concat(["erlyjs_api_", Name]), Func}.
    
  
-assign_ast('=', Name, _, Ast2, _, Ctx, #tree_acc{js_scopes = [_]} = Acc) ->
+assign_ast('=', Name, _, Ast2, _, Ctx, #trav{js_scopes = [_]} = Trav) ->
     %% TODO: dynamic typechecking       
     Ast = erl_syntax:application(none, erl_syntax:atom(put), [
         erl_syntax:atom(global_prefix(Name)), Ast2]),
-    maybe_global({{Ast, #ast_inf{}}, {Ctx, Acc}});
-assign_ast('=', _, Ast1, Ast2, _, Ctx, Acc) ->
+    maybe_global({{Ast, #ast_inf{}}, {Ctx, Trav}});
+assign_ast('=', _, Ast1, Ast2, _, Ctx, Trav) ->
     %% TODO: dynamic typechecking  
     Ast = erl_syntax:match_expr(Ast1, Ast2),
-    maybe_global({{Ast, #ast_inf{}}, {Ctx, Acc}}); 
+    maybe_global({{Ast, #ast_inf{}}, {Ctx, Trav}}); 
 assign_ast(Unknown, _, _, _, _, _, _) ->
     throw({error, lists:concat(["Unknown assignment operator: ", Unknown])}).        
 
 
-maybe_global({{Ast, Inf}, {#js_ctx{global = true} = Ctx, Acc}}) ->
+maybe_global({{Ast, Inf}, {#js_ctx{global = true} = Ctx, Trav}}) ->
     GlobalAsts = append_asts(Inf#ast_inf.global_asts, Ast),
-    {{[], Inf#ast_inf{global_asts = GlobalAsts}}, {Ctx, Acc}};
-maybe_global({AstInf, CtxAcc}) ->    
-    {AstInf, CtxAcc}.
+    {{[], Inf#ast_inf{global_asts = GlobalAsts}}, {Ctx, Trav}};
+maybe_global({AstInf, CtxTrav}) ->    
+    {AstInf, CtxTrav}.
     
  
 append_asts(Ast1, Ast2) when is_list(Ast1), is_list(Ast2) ->
@@ -831,23 +806,23 @@ global_prefix(Name) ->
     lists:concat(["js_", Name]).
                   
 %% TODO: eliminate 
-add_var_pairs(Acc) -> [dict:new() | Acc#tree_acc.var_pairs].
+add_names(Trav) -> [dict:new() | Trav#trav.names].
 
-acc_prepare(Acc) -> Acc#tree_acc{var_pairs = [dict:new() | Acc#tree_acc.var_pairs]}.   
+trav_prepare(Trav) -> Trav#trav{names = [dict:new() | Trav#trav.names]}.   
 
-acc_prepare_func(Acc) -> 
-    Acc#tree_acc{
-        var_pairs = [dict:new() | Acc#tree_acc.var_pairs], 
-        func_counter = Acc#tree_acc.func_counter + 1}.   
+trav_prepare_func(Trav) -> 
+    Trav#trav{
+        names = [dict:new() | Trav#trav.names], 
+        func_counter = Trav#trav.func_counter + 1}.   
         
-acc_clean(Acc) -> Acc#tree_acc{var_pairs = tl(Acc#tree_acc.var_pairs)}.
+trav_clean(Trav) -> Trav#trav{names = tl(Trav#trav.names)}.
     
-acc_reset(Acc) -> Acc#tree_acc{var_pairs = [dict:new() | tl(Acc#tree_acc.var_pairs)]}.
+trav_reset(Trav) -> Trav#trav{names = [dict:new() | tl(Trav#trav.names)]}.
             
 %% TODO: eliminate
-wrap_inc_func_counter(Acc) -> Acc#tree_acc.func_counter + 1.      
+wrap_inc_func_counter(Trav) -> Trav#trav.func_counter + 1.      
            
-wrap_add_scope(Acc) -> Acc#tree_acc{js_scopes = [#scope{} | Acc#tree_acc.js_scopes]}.
+wrap_add_scope(Trav) -> Trav#trav{js_scopes = [#scope{} | Trav#trav.js_scopes]}.
 
                    
 trace(Module, Line, Title, Content, Ctx) ->
