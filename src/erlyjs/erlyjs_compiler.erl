@@ -467,8 +467,16 @@ ast({for, Init, Cond, Final, Stmt}, {Ctx, Trav}) ->
         erl_syntax:application(none, func_name(Trav5), [VarsBefore])),    
     {{append_asts(OutInit, Ast), #ast_inf{internal_func_asts = [Func]}}, {Ctx, trav_clean(Trav6)}};
 ast({switch, Cond, CaseList, {_, DefaultStmts}}, {#js_ctx{global = true} = Ctx, Trav}) -> 
-   %% TODO: implement global scope   
-   empty_ast(Ctx, Trav);             
+   {Cond2, _, Trav2} = p_t(Cond, Ctx, Trav),   
+   {List, Trav3} =  get_clause_list(
+       CaseList ++ [{default, DefaultStmts}], trav_prepare(Trav2), Ctx), 
+   Clauses =  lists:map(
+       fun
+           ({Label, Guard, Stmts, _, _}) -> 
+               erl_syntax:clause([Label], Guard, Stmts)
+       end, List),                                                               
+   Ast = erl_syntax:case_expr(Cond2, Clauses),
+   {{[], #ast_inf{global_asts = [Ast]}}, {Ctx, trav_clean(Trav3)}};                   
 ast({switch, Cond, CaseList, {_, DefaultStmts}}, {Ctx, Trav}) ->       
     {Cond2, _, Trav2} = p_t(Cond, Ctx, Trav),   
     {List, Trav3} =  get_clause_list(
