@@ -321,7 +321,7 @@ ast({'if', Cond, Stmt}, {Ctx, Trav}) ->
 ast({'ifelse', Cond, StmtIf, StmtElse}, {#js_ctx{global = true} = Ctx, Trav}) ->
     {Cond2, _, #trav{names_set = Set}} = p_t(Cond, Ctx, Trav),
     TravIfIn = Trav#trav{names_set = Set, names = add_names(Trav)},
-    {StmtIf2, _, #trav{names_set = Set2} = Trav2} = p_t(StmtIf, Ctx, TravIfIn), 
+    {StmtIf2, _, #trav{names_set = Set2}} = p_t(StmtIf, Ctx, TravIfIn), 
     TravElseIn = Trav#trav{names_set = Set2, names = add_names(Trav)},
     {StmtElse2, _, Trav3} = p_t(StmtElse, Ctx, TravElseIn),             
     Ast = erl_syntax:case_expr(Cond2, [
@@ -706,7 +706,7 @@ call(Name, Args, Ctx, Trav) ->
     case built_in_global_func(Name, Arity) of
         ok ->     
             {Args2, _, Trav2} = p_t(Args, Ctx, Trav),  
-            Ast = erl_syntax:application(erl_syntax:atom(erlyjs_api_global, 
+            Ast = erl_syntax:application(erl_syntax:atom(erlyjs_api_global), 
                 erl_syntax:atom(Name), Args2),
             Ast2 = erl_syntax:case_expr(Ast, [
                 erl_syntax:clause([erl_syntax:atom(ok)], none, [erl_syntax:atom(ok)]),
