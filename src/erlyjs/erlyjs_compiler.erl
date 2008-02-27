@@ -297,77 +297,50 @@ ast({assign, {Op, _}, {identifier, _, Name}, In1}, {Ctx, Trav}) ->
     {Out3, Inf, Trav1} = p_t(In1, Ctx, Trav),    
     {{Out4, _}, {_, Trav2}} = var_ast(Name, Ctx#js_ctx{action = set}, Trav1), 
     assign_ast('=', Name, Out4, erlyjs_operators:ast(assign_to_op(Op), Out2, Out3), Inf, Ctx, Trav2);  
-ast({'if', Cond, If}, {#js_ctx{global = true} = Ctx, Trav}) -> 
-    {OutCond, _, #trav{names_set = Set}} = p_t(Cond, Ctx, Trav),
+ast({'if', Cond, Stmt}, {#js_ctx{global = true} = Ctx, Trav}) -> 
+    {Cond2, _, #trav{names_set = Set}} = p_t(Cond, Ctx, Trav),
     Trav2 = Trav#trav{names_set = Set, names = add_names(Trav)},
-    {OutStmt, _, Trav3} = p_t(If, Ctx, Trav2),
+    {Stmt2, _, Trav3} = p_t(Stmt, Ctx, Trav2),
     ReturnVarsElse = get_vars_init(Trav, Trav3, Ctx),                                        
-    Ast = erl_syntax:case_expr(OutCond, [
-        erl_syntax:clause([erl_syntax:atom(true)], none, [OutStmt]),
+    Ast = erl_syntax:case_expr(Cond2, [
+        erl_syntax:clause([erl_syntax:atom(true)], none, [Stmt2]),
         erl_syntax:clause([erl_syntax:underscore()], none, [ReturnVarsElse])]),
     {{[], #ast_inf{global_asts = [Ast]}}, {Ctx, trav_clean(Trav3)}};    
-ast({'if', Cond, If}, {Ctx, Trav}) -> 
-    {OutCond, _, #trav{names_set = Set}} = p_t(Cond, Ctx, Trav),
-    Trav2 = Trav#trav{names_set = Set, names = add_names(Trav)},
-    {OutIf, _, Trav3} = p_t(If, Ctx, Trav2),
-    ReturnVarsIf = get_vars_snapshot(Trav3),    
-    ReturnVarsElse = get_vars_init(Trav, Trav3, Ctx),
-    {Vars, Trav4} =  get_vars_result(Trav3, Trav3, Ctx),                                         
-    Ast = erl_syntax:case_expr(OutCond, [
-        erl_syntax:clause([erl_syntax:atom(true)], none, append_asts(OutIf, ReturnVarsIf)),
-        erl_syntax:clause([erl_syntax:underscore()], none, [ReturnVarsElse])]),
-    Ast2 = erl_syntax:match_expr(Vars, Ast),
-    {{Ast2, #ast_inf{}}, {Ctx, trav_clean(Trav4)}};
-ast({'if', Cond, If, Else}, {Ctx, Acc}) -> 
-    %% TODO: refactor and handle global scope
-    {OutCond, _, #trav{names_set = Set}} = parse_transform(Cond, Ctx, Acc),
-    
-    AccOutIfIn = Acc#trav{names_set = Set, names = add_names(Acc)},
-    {OutIf, _, #trav{names_set = Set1} = Acc1} = parse_transform(If, Ctx, AccOutIfIn), 
-    
-    AccOutElseIn = Acc#trav{names_set = Set1, names = add_names(Acc)},
-    {OutElse, _, Acc2} = parse_transform(Else, Ctx, AccOutElseIn),
-    
-    KeyList = lists:usort([ Key || {Key, _} <- lists:append([
-        dict:to_list(hd(Acc1#trav.names)), 
-        dict:to_list(hd(Acc2#trav.names))])]),
-    %% ReturnVarsIf = get_vars(Acc, Acc1, Ctx),
-    ReturnVarsIf = erl_syntax:tuple(lists:map(
-        fun
-            (Key) ->
-                case  dict:find(Key, hd(Acc1#trav.names)) of
-                    {ok, Val} ->
-                       erl_syntax:variable(Val);
-                    error ->
-                       {{Ast, _}, {_, _}} = var_ast(Key, Ctx, Acc),
-                       Ast
-                end
-        end, KeyList)), 
-    %% ReturnVarsElse = get_vars(Acc, Acc2, Ctx),         
-    ReturnVarsElse = erl_syntax:tuple(lists:map(
-        fun
-            (Key) ->
-                case  dict:find(Key, hd(Acc2#trav.names)) of
-                    {ok, Val} ->
-                       erl_syntax:variable(Val);
-                    error ->
-                       {{Ast, _}, {_, _}} = var_ast(Key, Ctx, Acc),
-                       Ast
-                end
-        end, KeyList)),    
-    %% {Vars, Acc3} = get_vars_result(Acc2, Acc2, Ctx),    
-    {Vars, Acc3} = lists:mapfoldl(
-        fun
-            (Key, AccIn) ->
-                
-                {{Ast, _}, {_, AccOut}} = var_ast(Key, Ctx#js_ctx{action = set}, AccIn),
-                {Ast, AccOut}
-        end,  Acc2, KeyList),         
-    Ast = erl_syntax:case_expr(OutCond, [
-        erl_syntax:clause([erl_syntax:atom(true)], none, append_asts(OutIf, ReturnVarsIf)),
-        erl_syntax:clause([erl_syntax:underscore()], none, append_asts(OutElse, ReturnVarsElse))]),
-    Ast2 = erl_syntax:match_expr(erl_syntax:tuple(Vars), Ast),
-    {{Ast2, #ast_inf{}}, {Ctx, trav_clean(Acc3)}};    
+ast({'if', Cond, Stmt}, {Ctx, Trav}) -> 
+    {Cond2, _, #trav{names_set = Set}} = p_t(Cond, Ctx, Trav),
+    TravIfIn = Trav#trav{names_set = Set, names = add_names(Trav)},   
+    {Stmt2, _, Trav2} = p_t(Stmt, Ctx, TravIfIn),     
+    NameKeys = get_name_keys(Trav2),  
+    [ReturnVarsIf] = get_vars_list(NameKeys, [Trav2], Trav, Ctx),                 
+    ReturnVarsElse = get_vars_init(Trav, Trav2, Ctx),  
+    {Vars, Trav3} =  get_vars_result(NameKeys, Trav2, Trav2, Ctx),  
+    Ast = erl_syntax:match_expr(Vars, erl_syntax:case_expr(Cond2, [
+        erl_syntax:clause([erl_syntax:atom(true)], none, append_asts(Stmt2, ReturnVarsIf)),
+        erl_syntax:clause([erl_syntax:underscore()], none, [ReturnVarsElse])])),
+    {{Ast, #ast_inf{}}, {Ctx, trav_clean(Trav3)}};    
+ast({'ifelse', Cond, StmtIf, StmtElse}, {#js_ctx{global = true} = Ctx, Trav}) ->
+    {Cond2, _, #trav{names_set = Set}} = p_t(Cond, Ctx, Trav),
+    TravIfIn = Trav#trav{names_set = Set, names = add_names(Trav)},
+    {StmtIf2, _, #trav{names_set = Set2} = Trav2} = p_t(StmtIf, Ctx, TravIfIn), 
+    TravElseIn = Trav#trav{names_set = Set2, names = add_names(Trav)},
+    {StmtElse2, _, Trav3} = p_t(StmtElse, Ctx, TravElseIn),             
+    Ast = erl_syntax:case_expr(Cond2, [
+        erl_syntax:clause([erl_syntax:atom(true)], none, [StmtIf2]),
+        erl_syntax:clause([erl_syntax:underscore()], none, [StmtElse2])]),       
+    {{[], #ast_inf{global_asts = [Ast]}}, {Ctx, trav_clean(Trav3)}};    
+ast({'ifelse', Cond, StmtIf, StmtElse}, {Ctx, Trav}) ->
+    {Cond2, _, #trav{names_set = Set}} = p_t(Cond, Ctx, Trav),
+    TravIfIn = Trav#trav{names_set = Set, names = add_names(Trav)},
+    {StmtIf2, _, #trav{names_set = Set1} = Trav2} = p_t(StmtIf, Ctx, TravIfIn), 
+    TravElseIn = Trav#trav{names_set = Set1, names = add_names(Trav)},
+    {StmtElse2, _, Trav3} = p_t(StmtElse, Ctx, TravElseIn),    
+    NameKeys = get_name_keys(Trav2, Trav3),     
+    [ReturnVarsIf, ReturnVarsElse] = get_vars_list(NameKeys, [Trav2, Trav3], Trav, Ctx),  
+    {Vars, Trav4} =  get_vars_result(NameKeys, Trav3, Trav3, Ctx),   
+    Ast = erl_syntax:match_expr(Vars, erl_syntax:case_expr(Cond2, [
+        erl_syntax:clause([erl_syntax:atom(true)], none, append_asts(StmtIf2, ReturnVarsIf)),
+        erl_syntax:clause([erl_syntax:underscore()], none, append_asts(StmtElse2, ReturnVarsElse))])), 
+    {{Ast, #ast_inf{}}, {Ctx, trav_clean(Trav4)}};    
 ast({do_while, Stmt, Cond}, {#js_ctx{global = true} = Ctx, Trav}) ->   
     {OutStmt, _, Trav2} = p_t(Stmt, Ctx, trav_prepare_func(Trav)),   
     {OutCond, _, Trav3} = p_t(Cond, Ctx, Trav2),
@@ -381,8 +354,8 @@ ast({do_while, Stmt, Cond}, {#js_ctx{global = true} = Ctx, Trav}) ->
     Ast = erl_syntax:application(none, func_name(Trav2), []),
     {{[], #ast_inf{internal_func_asts = [Func], global_asts = [Ast]}}, {Ctx, trav_clean(Trav3)}};
 ast({do_while, Stmt, Cond}, {Ctx, Trav}) ->       
-    {OutStmt, _, Trav2} = parse_transform(Stmt, Ctx, trav_prepare_func(Trav)),   
-    {OutCond, _, Trav3} = parse_transform(Cond, Ctx, Trav2),
+    {OutStmt, _, Trav2} = p_t(Stmt, Ctx, trav_prepare_func(Trav)),   
+    {OutCond, _, Trav3} = p_t(Cond, Ctx, Trav2),
     VarsBefore = get_vars_init(Trav, Trav2, Ctx),
     VarsAfterStmt = get_vars_snapshot(Trav2),
     {VarsAfter, Trav4} = get_vars_result(Trav2, Trav3, Ctx),    
@@ -468,8 +441,8 @@ ast({for, Init, Cond, Final, Stmt}, {Ctx, Trav}) ->
     {{append_asts(OutInit, Ast), #ast_inf{internal_func_asts = [Func]}}, {Ctx, trav_clean(Trav6)}};
 ast({switch, Cond, CaseList, {_, DefaultStmts}}, {#js_ctx{global = true} = Ctx, Trav}) -> 
    {Cond2, _, Trav2} = p_t(Cond, Ctx, Trav),   
-   {List, Trav3} =  get_clause_list(
-       CaseList ++ [{default, DefaultStmts}], trav_prepare(Trav2), Ctx), 
+   CaseList2 = CaseList ++ [{default, DefaultStmts}],
+   {List, Trav3} =  get_switch_clause_list(CaseList2, trav_prepare(Trav2), Ctx), 
    Clauses =  lists:map(
        fun
            ({Label, Guard, Stmts, _, _}) -> 
@@ -478,13 +451,13 @@ ast({switch, Cond, CaseList, {_, DefaultStmts}}, {#js_ctx{global = true} = Ctx, 
    Ast = erl_syntax:case_expr(Cond2, Clauses),
    {{[], #ast_inf{global_asts = [Ast]}}, {Ctx, trav_clean(Trav3)}};                   
 ast({switch, Cond, CaseList, {_, DefaultStmts}}, {Ctx, Trav}) ->       
-    {Cond2, _, Trav2} = p_t(Cond, Ctx, Trav),   
-    {List, Trav3} =  get_clause_list(
-        CaseList ++ [{default, DefaultStmts}], trav_prepare(Trav2), Ctx),     
-    NameList = lists:usort(lists:flatten([ X || {_,_,_,X,_} <- List])),   
+    {Cond2, _, Trav2} = p_t(Cond, Ctx, Trav), 
+    CaseList2 = CaseList ++ [{default, DefaultStmts}], 
+    {List, Trav3} =  get_switch_clause_list(CaseList2, trav_prepare(Trav2), Ctx),
+    NameKeys = get_name_keys(List),   
     TravList = [ X || {_,_,_,_,X} <- List],
-    StmtsReturnVarsList = get_vars_list(NameList, TravList, Trav, Ctx),
-    {Vars, Trav4} =  get_vars_result(NameList, Trav3, Trav3, Ctx),                  
+    StmtsReturnVarsList = get_vars_list(NameKeys, TravList, Trav, Ctx),   
+    {Vars, Trav4} =  get_vars_result(NameKeys, Trav3, Trav3, Ctx),     
     Clauses =  lists:map(
         fun
             ({{Label, Guard, Stmts, _, _}, StmtsReturnVars}) ->
@@ -598,7 +571,21 @@ name_search(Key, [H | T], Trav) ->
             end;
         error -> name_search(Key, T, [H | Trav]) 
     end.
+           
 
+get_name_keys(L) when is_list(L) ->            
+    lists:usort([Key || {Key, _} <- lists:flatten([element(4, X) || X <- L])]); 
+
+    
+get_name_keys(Trav) ->     
+    lists:usort([ Key || {Key, _} <- lists:flatten( 
+        dict:to_list(hd(Trav#trav.names)))]).    
+
+get_name_keys(Trav1, Trav2) ->     
+    lists:usort([ Key || {Key, _} <- lists:flatten(lists:append([
+        dict:to_list(hd(Trav1#trav.names)), 
+        dict:to_list(hd(Trav2#trav.names))]))]).
+    
 
 get_vars_init(Trav1, Trav2, Ctx) ->
     erl_syntax:tuple(dict:fold(
@@ -617,13 +604,13 @@ get_vars_snapshot(Trav) ->
         end, [], hd(Trav#trav.names))).  
        
         
-get_vars_list(NameList, TravList, Trav, Ctx) ->        
+get_vars_list(NameKeys, TravList, Trav, Ctx) ->        
     lists:map(
       fun
           (X) ->
               erl_syntax:tuple(lists:map(
               fun
-                  ({Key, _}) ->
+                  (Key) ->
                       case  dict:find(Key, hd(X#trav.names)) of
                           {ok, Val} ->
                              erl_syntax:variable(Val);
@@ -631,10 +618,10 @@ get_vars_list(NameList, TravList, Trav, Ctx) ->
                              {{Ast, _}, {_, _}} = var_ast(Key, Ctx, Trav),
                              Ast
                       end
-              end, NameList))
+              end, NameKeys))
       end, TravList).
         
-
+          
 get_global_vars(Trav) ->
     L = dict:to_list(hd(Trav#trav.names)),
     erl_syntax:tuple([erl_syntax:application(none, erl_syntax:atom(get), 
@@ -642,20 +629,21 @@ get_global_vars(Trav) ->
 
 
 get_vars_result(Trav, TravSet, Ctx) ->
-    get_vars_result(dict:to_list(hd(Trav#trav.names)), Trav, TravSet, Ctx).
+    get_vars_result(get_name_keys(Trav), Trav, TravSet, Ctx).
     
-get_vars_result(NameList, Trav, TravSet, Ctx) ->
+get_vars_result(NameKeys, Trav, TravSet, Ctx) ->
     TravInit = Trav#trav{names_set = TravSet#trav.names_set},        
     {VarsAfter, Trav2} = lists:mapfoldl(
         fun
-            ({Key, _}, AccTravIn) ->
+            (Key, AccTravIn) ->
                 {{Ast, _}, {_, AccTravOut}} = var_ast(Key, Ctx#js_ctx{action = set}, AccTravIn),
                 {Ast, AccTravOut}
-            end,  TravInit, NameList),  
-    {erl_syntax:tuple(VarsAfter), Trav2}.    
-    
+            end,  TravInit, NameKeys),  
+    {erl_syntax:tuple(VarsAfter), Trav2}.      
+                
 
-get_clause_list(CaseList, Trav, Ctx) ->
+                                       
+get_switch_clause_list(CaseList, Trav, Ctx) ->
     lists:mapfoldl(   
         fun      
             ({default, StmtsIn}, AccTravIn) ->  
@@ -680,21 +668,21 @@ get_clause_list(CaseList, Trav, Ctx) ->
                 AccTravIn2 = trav_reset(AccTravIn),
                 case lists:last(StmtsIn) of    
                     {break, _} ->                       
-                        StmtsIn2 = lists:reverse(tl(lists:reverse(StmtsIn))),
-                        {LabelsOut, _, _} = p_t(LabelsIn, Ctx, AccTravIn2), 
+                        StmtsIn2 = lists:reverse(tl(lists:reverse(StmtsIn))),       
+                        {LabelsOut, _, _} = p_t(LabelsIn, Ctx, AccTravIn2),     
                         Guards = erl_syntax:disjunction(lists:map(
                             fun
                                 (Label) -> 
                                     Ast = erl_syntax:variable("X"),
                                     erl_syntax:infix_expr(Ast, erl_syntax:operator('=='), Label)
-                            end, LabelsOut)), 
+                            end, LabelsOut)),  
                         {StmtsOut, _, AccTravOut} = p_t(StmtsIn2, Ctx, AccTravIn2),  
                         Names = dict:to_list(hd(AccTravOut#trav.names)),          
                         {{erl_syntax:variable("X"), Guards, StmtsOut, Names, AccTravOut}, AccTravOut};
                      _ ->
                          exit(not_implemented_yet) 
                 end         
-        end, Trav, CaseList).
+        end, Trav, CaseList).                      
             
                        
 func(Name, Params, Body, Ctx, Trav) -> 

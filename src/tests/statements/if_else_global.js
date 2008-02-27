@@ -1,6 +1,6 @@
-Trav#trav{names_set = Set, names = add_names(Trav)// Mandatory. Return here a description of the test case.
+// Mandatory. Return here a description of the test case.
 function test_description() {
-    return "If statement";
+    return "If else statement in global scope";
 }
 
 // Mandatory. Return here an array of arguments the testsuite will use 
@@ -11,18 +11,19 @@ function test_args() {
 
 // Mandatory. Return here the expected test result. 
 function test_ok() {
-    return 2;
+    return 3;
 }
 
 // Optional. Provide here any global code.
-
+var a=2, b=3, c=4;
+if (true)  
+    a = b;
+else
+    a = c;
 
 // Mandatory. The actual test. 
 // Testsuite invokes this function with the arguments from test_args()
 // and compares the return value with the expected result from test_ok().
 function test() {
-    var a=2;
-    if (false)  
-        a += 1; 
     return a;
 }

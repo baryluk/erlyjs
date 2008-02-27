@@ -15,7 +15,6 @@ function test_ok() {
 }
 
 // Optional. Provide here any global code.
-
 var a=2;
 
 if (true)  

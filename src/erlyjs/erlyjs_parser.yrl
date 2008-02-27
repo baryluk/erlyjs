@@ -335,7 +335,7 @@ LabeledStatement -> identifier ':' Statement : {label, '$2'}.
 
 %% If Statement
 IfStatement -> 'if' ParenthesizedExpression Statement  : {'if', '$2', '$3'}.
-IfStatement -> 'if' ParenthesizedExpression Statement else Statement : {'if', '$2', '$3', '$5'}.
+IfStatement -> 'if' ParenthesizedExpression Statement else Statement : {ifelse, '$2', '$3', '$5'}.
 
 
 %% Switch Statement
