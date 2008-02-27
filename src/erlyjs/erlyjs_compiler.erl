@@ -706,7 +706,7 @@ call(Name, Args, Ctx, Trav) ->
     case built_in_global_func(Name, Arity) of
         ok ->     
             {Args2, _, Trav2} = p_t(Args, Ctx, Trav),  
-            Ast = erl_syntax:application(erl_syntax:atom(erlyjs_global_funcs), 
+            Ast = erl_syntax:application(erl_syntax:atom(erlyjs_api_global, 
                 erl_syntax:atom(Name), Args2),
             Ast2 = erl_syntax:case_expr(Ast, [
                 erl_syntax:clause([erl_syntax:atom(ok)], none, [erl_syntax:atom(ok)]),
