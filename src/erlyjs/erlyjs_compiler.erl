@@ -310,14 +310,14 @@ ast({'if', Cond, Stmt}, {Ctx, Trav}) ->
     {Cond2, _, #trav{names_set = Set}} = p_t(Cond, Ctx, Trav),
     TravIfIn = Trav#trav{names_set = Set, names = add_names(Trav)},   
     {Stmt2, _, Trav2} = p_t(Stmt, Ctx, TravIfIn),     
-    NameKeys = get_name_keys(Trav2),  
-    [ReturnVarsIf] = get_vars_list(NameKeys, [Trav2], Trav, Ctx),                 
-    ReturnVarsElse = get_vars_init(Trav, Trav2, Ctx),  
+    NameKeys = get_name_keys(Trav2),               
+    [ReturnVarsIf] = get_vars_list(NameKeys, [Trav2], Trav, Ctx),                  
+    ReturnVarsElse = get_vars_init(Trav, Trav2, Ctx), 
     {Vars, Trav3} =  get_vars_result(NameKeys, Trav2, Trav2, Ctx),  
     Ast = erl_syntax:match_expr(Vars, erl_syntax:case_expr(Cond2, [
         erl_syntax:clause([erl_syntax:atom(true)], none, append_asts(Stmt2, ReturnVarsIf)),
-        erl_syntax:clause([erl_syntax:underscore()], none, [ReturnVarsElse])])),
-    {{Ast, #ast_inf{}}, {Ctx, trav_clean(Trav3)}};    
+        erl_syntax:clause([erl_syntax:underscore()], none, [ReturnVarsElse])])),   
+     {{Ast, #ast_inf{}}, {Ctx, trav_clean(Trav3)}};    
 ast({'ifelse', Cond, StmtIf, StmtElse}, {#js_ctx{global = true} = Ctx, Trav}) ->
     {Cond2, _, #trav{names_set = Set}} = p_t(Cond, Ctx, Trav),
     TravIfIn = Trav#trav{names_set = Set, names = add_names(Trav)},

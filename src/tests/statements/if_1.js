@@ -1,4 +1,4 @@
-Trav#trav{names_set = Set, names = add_names(Trav)// Mandatory. Return here a description of the test case.
+// Mandatory. Return here a description of the test case.
 function test_description() {
     return "If statement";
 }
