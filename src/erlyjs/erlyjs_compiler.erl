@@ -480,7 +480,8 @@ func_name(Trav) ->
       
 var_ast(Key, #js_ctx{action = set} = Ctx, Trav) ->
     Scope = hd(Trav#trav.js_scopes),
-    ErlName = erl_syntax_lib:new_variable_name(Trav#trav.names_set), 
+    ErlNamePostfix = tl(atom_to_list(erl_syntax_lib:new_variable_name(Trav#trav.names_set))),  
+    ErlName = lists:concat(["V_", Key, "_", ErlNamePostfix]),
     Dict = dict:store(Key, ErlName, Scope#scope.names_dict),
     Names = case Trav#trav.names of
         [] ->
@@ -488,10 +489,10 @@ var_ast(Key, #js_ctx{action = set} = Ctx, Trav) ->
         Val ->
             [dict:store(Key, ErlName, hd(Val)) | tl(Val)]
     end,
-    Trav1 = Trav#trav{names_set = sets:add_element(ErlName, Trav#trav.names_set), 
+    Trav2 = Trav#trav{names_set = sets:add_element(ErlName, Trav#trav.names_set), 
         js_scopes = [#scope{names_dict = Dict} | tl(Trav#trav.js_scopes)],
         names = Names},
-    {{erl_syntax:variable(ErlName), #ast_inf{}}, {Ctx, Trav1}}; 
+    {{erl_syntax:variable(ErlName), #ast_inf{}}, {Ctx, Trav2}}; 
     
 var_ast(undefined, #js_ctx{action = get} = Ctx, Trav) ->
     {{erl_syntax:atom(undefined), #ast_inf{}}, {Ctx, Trav}};
