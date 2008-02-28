@@ -38,71 +38,78 @@
     f_acos/1,
     f_asin/1,
     f_atan/1,
-    f_atan2/1,
+    f_atan2/2,
     f_ceil/1,
     f_cos/1,
     f_exp/1,
     f_floor/1,
     f_log/1,
-    f_max/1,
-    f_min/1,
-    f_pow/1,
-    f_random/1,
+    f_max/2,
+    f_min/2,
+    f_pow/2,
+    f_random/0,
     f_round/1,
     f_sin/1,
     f_sqrt/1,
-    f_tan/1]).
+    f_tan/1]).  
+      
   
-f_abs(Arg) ->
-    exit(not_implemented_yet). 
+f_abs(X) ->
+    abs(X). 
 
-f_acos(Arg) ->
-    exit(not_implemented_yet).  
+f_acos(X) ->
+    math:acos(X).  
 
-f_asin(Arg) ->
-    exit(not_implemented_yet). 
+f_asin(X) ->
+    math:asin(X). 
 
-f_atan(Arg) ->
-    exit(not_implemented_yet).  
+f_atan(X) ->
+    math:atan(X).  
 
-f_atan2(Arg) ->
-    exit(not_implemented_yet). 
+f_atan2(Y, X) ->
+    math:atan2(Y, X). 
 
-f_ceil(Arg) ->
-    exit(not_implemented_yet).  
+f_ceil(X) ->
+    round(X + 0.5).  
 
-f_cos(Arg) ->
-    exit(not_implemented_yet). 
+f_cos(X) ->
+    math:cos(X). 
 
-f_exp(Arg) ->
-    exit(not_implemented_yet). 
+f_exp(X) ->
+    math:exp(X). 
 
-f_floor(Arg) ->
-    exit(not_implemented_yet). 
+f_floor(X) ->
+    round(X - 0.5). 
 
-f_log(Arg) ->
-    exit(not_implemented_yet). 
+f_log(X) ->
+    math:log(X). 
 
-f_max(Arg) ->
-    exit(not_implemented_yet). 
+f_max(X, Y) ->
+    case (X > Y) of
+        true -> X;
+        _ -> Y 
+    end.
+    
+f_min(X, Y) ->
+    case (X < Y) of
+        true -> X;
+        _ -> Y 
+    end.
 
-f_min(Arg) ->
-    exit(not_implemented_yet). 
+f_pow(X, Y) ->
+    math:pow(X, Y). 
 
-f_pow(Arg) ->
-    exit(not_implemented_yet). 
+f_random() ->
+    random:uniform(). 
 
-f_random(Arg) ->
-    exit(not_implemented_yet). 
+f_round(X) ->
+    round(X). 
 
-f_round(Arg) ->
-    exit(not_implemented_yet). 
+f_sin(X) ->
+    math:sin(X).
 
-f_sin(Arg) ->
-    exit(not_implemented_yet).
+f_sqrt(X) ->
+    math:sqrt(X).
 
-f_sqrt(Arg) ->
-    exit(not_implemented_yet).
-
-f_tan(Arg) ->
-    exit(not_implemented_yet).
+f_tan(X) ->
+    math:tan(X).
