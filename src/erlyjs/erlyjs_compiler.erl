@@ -750,27 +750,27 @@ get_mod_func(parseInt, 2) -> {erlyjs_global, parse_int};
 get_mod_func(parseFloat, 1) -> {erlyjs_global, parse_float};
 get_mod_func(_, _) -> err.      
 
-get_mod_func('Date', now, 0) -> {erlyjs_global_math, f_now}; 
-get_mod_func('Date', parse, 1) -> {erlyjs_global_math, f_parse};
+get_mod_func('Date', now, 0) -> {erlyjs_global_math, now}; 
+get_mod_func('Date', parse, 1) -> {erlyjs_global_math, parse};
 %%
-get_mod_func('Math', [abs], 1) -> {erlyjs_global_math, f_abs}; 
-get_mod_func('Math', [acos], 1) -> {erlyjs_global_math, f_acos};    
-get_mod_func('Math', [asin], 1) -> {erlyjs_global_math, f_asin};    
-get_mod_func('Math', [atan], 1) -> {erlyjs_global_math, f_atan};    
-get_mod_func('Math', [atan2], 2) -> {erlyjs_global_math, f_atan2};    
-get_mod_func('Math', [ceils], 1) -> {erlyjs_global_math, f_ceil};    
-get_mod_func('Math', [cos], 1) -> {erlyjs_global_math, f_cos};    
-get_mod_func('Math', [exp], 1) -> {erlyjs_global_math, f_exp};    
-get_mod_func('Math', [floor], 1) -> {erlyjs_global_math, f_floor};    
-get_mod_func('Math', [log], 1) -> {erlyjs_global_math, f_log};    
-get_mod_func('Math', [max], 2) -> {erlyjs_global_math, f_max};    
-get_mod_func('Math', [min], 2) -> {erlyjs_global_math, f_min};    
-get_mod_func('Math', [pow], 2) -> {erlyjs_global_math, f_pow};    
-get_mod_func('Math', [random], 0) -> {erlyjs_global_math, f_random};    
-get_mod_func('Math', [round], 1) -> {erlyjs_global_math, f_round};    
-get_mod_func('Math', [sin], 1) -> {erlyjs_global_math, f_sin};    
-get_mod_func('Math', [sqrt], 1) -> {erlyjs_global_math, f_sqrt};    
-get_mod_func('Math', [tan], 1) -> {erlyjs_global_math, f_tan}; 
+get_mod_func('Math', [abs], 1) -> {erlyjs_global_math, abs}; 
+get_mod_func('Math', [acos], 1) -> {erlyjs_global_math, acos};    
+get_mod_func('Math', [asin], 1) -> {erlyjs_global_math, asin};    
+get_mod_func('Math', [atan], 1) -> {erlyjs_global_math, atan};    
+get_mod_func('Math', [atan2], 2) -> {erlyjs_global_math, atan2};    
+get_mod_func('Math', [ceils], 1) -> {erlyjs_global_math, ceil};    
+get_mod_func('Math', [cos], 1) -> {erlyjs_global_math, cos};    
+get_mod_func('Math', [exp], 1) -> {erlyjs_global_math, exp};    
+get_mod_func('Math', [floor], 1) -> {erlyjs_global_math, floor};    
+get_mod_func('Math', [log], 1) -> {erlyjs_global_math, log};    
+get_mod_func('Math', [max], 2) -> {erlyjs_global_math, max};    
+get_mod_func('Math', [min], 2) -> {erlyjs_global_math, min};    
+get_mod_func('Math', [pow], 2) -> {erlyjs_global_math, pow};    
+get_mod_func('Math', [random], 0) -> {erlyjs_global_math, random};    
+get_mod_func('Math', [round], 1) -> {erlyjs_global_math, round};    
+get_mod_func('Math', [sin], 1) -> {erlyjs_global_math, sin};    
+get_mod_func('Math', [sqrt], 1) -> {erlyjs_global_math, sqrt};    
+get_mod_func('Math', [tan], 1) -> {erlyjs_global_math, tan}; 
 %%
 get_mod_func(console, [log], 1)  -> {erlyjs_api_console, f_log}; 
 %%                                                                                               

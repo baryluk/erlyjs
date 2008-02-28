@@ -34,11 +34,12 @@
 -author('rsaccon@gmail.com'). 
  
 -export([
-    f_now/0, 
-    f_parse/1]).
+    now/0, 
+    parse/1]).
  
-f_now() ->
-    exit(not_implemented_yet).   
+now() ->
+    {MSecs, Secs, _} = now(),
+    {ok, 1000000 * MSecs + Secs}.   
     
-f_parse(_DateStr) ->
+parse(_DateStr) ->
     exit(not_implemented_yet).

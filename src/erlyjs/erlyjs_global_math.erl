@@ -34,82 +34,82 @@
 -author('rsaccon@gmail.com'). 
  
 -export([
-    f_abs/1, 
-    f_acos/1,
-    f_asin/1,
-    f_atan/1,
-    f_atan2/2,
-    f_ceil/1,
-    f_cos/1,
-    f_exp/1,
-    f_floor/1,
-    f_log/1,
-    f_max/2,
-    f_min/2,
-    f_pow/2,
-    f_random/0,
-    f_round/1,
-    f_sin/1,
-    f_sqrt/1,
-    f_tan/1]).  
+    abs/1, 
+    acos/1,
+    asin/1,
+    atan/1,
+    atan2/2,
+    ceil/1,
+    cos/1,
+    exp/1,
+    floor/1,
+    log/1,
+    max/2,
+    min/2,
+    pow/2,
+    random/0,
+    round/1,
+    sin/1,
+    sqrt/1,
+    tan/1]).  
       
   
-f_abs(X) ->
-    abs(X). 
+abs(X) ->
+    {ok, erlang:abs(X)}. 
 
-f_acos(X) ->
-    math:acos(X).  
+acos(X) ->
+    {ok, math:acos(X)}.  
 
-f_asin(X) ->
-    math:asin(X). 
+asin(X) ->
+    {ok, math:asin(X)}. 
 
-f_atan(X) ->
-    math:atan(X).  
+atan(X) ->
+    {ok, math:atan(X)}.  
 
-f_atan2(Y, X) ->
-    math:atan2(Y, X). 
+atan2(Y, X) ->
+    {ok, math:atan2(Y, X)}. 
 
-f_ceil(X) ->
+ceil(X) ->
     round(X + 0.5).  
 
-f_cos(X) ->
+cos(X) ->
     math:cos(X). 
 
-f_exp(X) ->
+exp(X) ->
     math:exp(X). 
 
-f_floor(X) ->
+floor(X) ->
     round(X - 0.5). 
 
-f_log(X) ->
+log(X) ->
     math:log(X). 
 
-f_max(X, Y) ->
+max(X, Y) ->
     case (X > Y) of
         true -> X;
         _ -> Y 
     end.
     
-f_min(X, Y) ->
+min(X, Y) ->
     case (X < Y) of
         true -> X;
         _ -> Y 
     end.
 
-f_pow(X, Y) ->
+pow(X, Y) ->
     math:pow(X, Y). 
 
-f_random() ->
+random() ->
     random:uniform(). 
 
-f_round(X) ->
+round(X) ->
     round(X). 
 
-f_sin(X) ->
+sin(X) ->
     math:sin(X).
 
-f_sqrt(X) ->
+sqrt(X) ->
     math:sqrt(X).
 
-f_tan(X) ->
+tan(X) ->
     math:tan(X).
