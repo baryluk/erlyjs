@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% File:      erlyjs_api_global.erl
+%%% File:      erlyjs_global.erl
 %%% @author    Roberto Saccon <rsaccon@gmail.com> [http://rsaccon.com]
 %%% @copyright 2008 Roberto Saccon
 %%% @doc  
@@ -30,7 +30,7 @@
 %%%
 %%% @since 2008-02-17 by Roberto Saccon
 %%%-------------------------------------------------------------------
--module(erlyjs_api_global).
+-module(erlyjs_global).
 -author('rsaccon@gmail.com').
 
 -define(SKIP_ENCODE_URI(C), ((C >= $a andalso C =< $z) orelse
