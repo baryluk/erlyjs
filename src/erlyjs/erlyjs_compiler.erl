@@ -255,7 +255,7 @@ ast({{identifier, _, 'NaN'}, _}, {Ctx, Trav}) ->
 ast({identifier, _, Name}, {Ctx, Trav}) ->  
     var_ast(Name, Ctx, Trav);
 ast({{identifier, _, Name} , {'(', Args}}, {Ctx, Trav}) ->
-    call(Name, Args, Ctx, Trav);
+    call(Name, [], Args, Ctx, Trav);
 ast({{{identifier, _, Name}, Names}, {'(', Args}}, {Ctx, Trav}) ->
     call(Name, Names, Args, Ctx, Trav);  
 ast({{identifier, _, Name}, Value}, {Ctx, Trav}) -> 
@@ -701,57 +701,39 @@ func(Name, Params, Body, Ctx, Trav) ->
             {{Ast1, Inf}, {Ctx, Trav}}
     end.
     
-      
-call(Name, Args, Ctx, Trav) ->
+         
+call(Name, DotSepNames, Args, Ctx, Trav) ->
     Arity = length(Args),
-    case get_mod_func(Name, Arity) of  
-        {Mod, Func} ->     
-            {Args2, _, Trav2} = p_t(Args, Ctx, Trav),  
-            Ast = erl_syntax:application(erl_syntax:atom(Mod), erl_syntax:atom(Func), Args2),
-            Ast2 = erl_syntax:case_expr(Ast, [
-                erl_syntax:clause([erl_syntax:atom(ok)], none, [erl_syntax:atom(ok)]),
-                erl_syntax:clause([erl_syntax:tuple([erl_syntax:atom(ok), 
-                    erl_syntax:variable("Val")])], none, [erl_syntax:variable("Val")]),
-                erl_syntax:clause([erl_syntax:underscore()], none, [erl_syntax:atom(error)])]),
-            maybe_global({{Ast2, #ast_inf{}}, {Ctx, Trav2}});
-        _ ->
-            throw({error, lists:concat(["No such global function: ", 
-                Name, " (arity: ", Arity, ")"])})
-    end.
-    
-    
-call(Name, Names, Args, Ctx, Trav) ->
-    Arity = length(Args),
-    case get_mod_func(Name, Names, Arity) of
+    case get_mod_func(Name, DotSepNames, Arity) of
         {Mod, Func} ->
-            {Args1, _, Trav1} = p_t(Args, Ctx, Trav),    
-            Ast = erl_syntax:application(erl_syntax:atom(Mod), erl_syntax:atom(Func), Args1),
-            Ast2 = erl_syntax:case_expr(Ast, [
-                erl_syntax:clause([erl_syntax:atom(ok)], none, [erl_syntax:atom(ok)]),
-                erl_syntax:clause([erl_syntax:tuple([erl_syntax:atom(ok), 
-                    erl_syntax:variable("Val")])], none, [erl_syntax:variable("Val")]),
-                erl_syntax:clause([erl_syntax:underscore()], none, [erl_syntax:atom(error)])]),
-            maybe_global({{Ast2, #ast_inf{}}, {Ctx, Trav1}});
-        _ ->
-            throw({error, lists:concat(["No such function: ", todo_prettyprint_functionname])})
-    end.
+            {Args2, _, Trav1} = p_t(Args, Ctx, Trav),    
+            FuncAst = erl_syntax:application(erl_syntax:atom(Mod), erl_syntax:atom(Func), Args2),
+            ClauseOk = erl_syntax:clause([erl_syntax:variable("Val")], 
+                none, [erl_syntax:variable("Val")]),
+            ClauseCatch = erl_syntax:clause([erl_syntax:variable("Err")], none,
+                [erl_syntax:tuple([erl_syntax:atom(error), erl_syntax:variable("Err")])]),
+            Ast = erl_syntax:try_expr([FuncAst], [ClauseOk], [ClauseCatch]),                
+            maybe_global({{Ast, #ast_inf{}}, {Ctx, Trav1}});
+        _ ->  
+            throw({error, lists:concat(["No such function: ", 
+                pprint_name(Name, DotSepNames, Arity)])})
+    end.    
         
-
-get_mod_func(decodeURI, 1) -> {erlyjs_global, decode_uri};
-get_mod_func(decodeURIComponent, 1) -> {erlyjs_global, decode_uri_component};
-get_mod_func(encodeURI, 1) -> {erlyjs_global, encode_uri};
-get_mod_func(encodeURIComponent, 1) -> {erlyjs_global, encode_uri_component};
-get_mod_func(eval, 1) -> {erlyjs_global, eval};
-get_mod_func(eval, 2) -> {erlyjs_global, eval};
-get_mod_func(isFinite, 1) -> {erlyjs_global, is_finite};
-get_mod_func(isNaN, 1) -> {erlyjs_global, is_nan};
-get_mod_func(parseInt, 1) -> {erlyjs_global, parse_int};
-get_mod_func(parseInt, 2) -> {erlyjs_global, parse_int};
-get_mod_func(parseFloat, 1) -> {erlyjs_global, parse_float};
-get_mod_func(_, _) -> err.      
-
-get_mod_func('Date', now, 0) -> {erlyjs_global_math, now}; 
-get_mod_func('Date', parse, 1) -> {erlyjs_global_math, parse};
+   
+get_mod_func(decodeURI, [], 1) -> {erlyjs_global, decode_uri};
+get_mod_func(decodeURIComponent, [], 1) -> {erlyjs_global, decode_uri_component};
+get_mod_func(encodeURI, [], 1) -> {erlyjs_global, encode_uri};
+get_mod_func(encodeURIComponent, [], 1) -> {erlyjs_global, encode_uri_component};
+get_mod_func(eval, [], 1) -> {erlyjs_global, eval};
+get_mod_func(eval, [], 2) -> {erlyjs_global, eval};
+get_mod_func(isFinite, [],1) -> {erlyjs_global, is_finite};
+get_mod_func(isNaN, [], 1) -> {erlyjs_global, is_nan};
+get_mod_func(parseInt, [], 1) -> {erlyjs_global, parse_int};
+get_mod_func(parseInt, [], 2) -> {erlyjs_global, parse_int};
+get_mod_func(parseFloat, [], 1) -> {erlyjs_global, parse_float};
+%%     
+get_mod_func('Date', [now], 0) -> {erlyjs_global_date, now}; 
+get_mod_func('Date', [parse], 1) -> {erlyjs_global_date, parse};
 %%
 get_mod_func('Math', [abs], 1) -> {erlyjs_global_math, abs}; 
 get_mod_func('Math', [acos], 1) -> {erlyjs_global_math, acos};    
@@ -840,7 +822,13 @@ trav_reset(Trav) -> Trav#trav{names = [dict:new() | tl(Trav#trav.names)]}.
 wrap_inc_func_counter(Trav) -> Trav#trav.func_counter + 1.      
            
 wrap_add_scope(Trav) -> Trav#trav{js_scopes = [#scope{} | Trav#trav.js_scopes]}.
+ 
 
+pprint_name(Name, [], Arity)  -> 
+    lists:concat([Name, "/", Arity]);
+pprint_name(Name, DotSepNames, Arity)  ->
+    lists:concat([Name, ".", string:join([atom_to_list(X) || X <- DotSepNames], "."),"/", Arity]).
+     
                    
 trace(Module, Line, Title, Content, Ctx) ->
     case Ctx#js_ctx.verbose of

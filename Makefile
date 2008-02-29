@@ -1,6 +1,4 @@
-ERL=/Users/rsaccon/R11B/start.sh
-#ERL=/usr/local/erlware/bin/erl
-#ERL=erl
+ERL=erl
 
 all:
 	$(ERL) -make

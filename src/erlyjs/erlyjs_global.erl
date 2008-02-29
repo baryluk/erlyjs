@@ -103,11 +103,11 @@ decode_uri_component(_Str) ->
 
 
 encode_uri(Str) ->
-    {ok, encode(Str, uri)}. 
+    encode(Str, uri). 
 
 
 encode_uri_component(Str) ->
-    {ok, encode(Str, uri_component)}.
+    encode(Str, uri_component).
 
 
 %% TODO: variable mapping and bindings
@@ -119,7 +119,7 @@ eval(Str) when is_list(Str) ->
                     L = [erl_syntax:revert(X) || X <- ErlAstList],             
                     case  erl_eval:exprs(L, erl_eval:new_bindings()) of
                         {value, Value, _Bindings} ->
-                            {ok, Value};
+                            Value;
                         Err ->
                             Err
                     end;
@@ -141,30 +141,30 @@ eval(Str, _Object) when is_list(Str) ->
 %% TODO: check for positive infinity or negative infinity
 is_finite(X) ->
     case is_nan(X) of
-        {ok, true} ->
-            {ok, false};
+        true ->
+            false;
         _ ->
-            {ok, true}
+            true
     end.
             
     
     
 %% TODO: check for positive infinity or negative infinity    
 is_nan('NaN') ->
-    {ok, true};
+    true;
 is_nan(X) when is_number(X) ->
-    {ok, false};
+    false;
 is_nan(X) ->
     case is_nan(parse_int2(X)) of
-        {ok, true} ->
+        true ->
             is_nan(parse_float2(X));
         _ ->
-            {ok, false}
+            false
     end.
 
             
 parse_int(Str) -> 
-    {ok, parse_int2(Str)}.
+    parse_int2(Str).
 
 
 parse_int(_Str, _Radix) ->
@@ -172,7 +172,7 @@ parse_int(_Str, _Radix) ->
         
 
 parse_float(Str) ->
-    {ok, parse_float2(Str)}.
+    parse_float2(Str).
 
     
 %%====================================================================

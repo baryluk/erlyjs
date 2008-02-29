@@ -55,22 +55,22 @@
       
   
 abs(X) ->
-    {ok, erlang:abs(X)}. 
+    erlang:abs(X). 
 
 acos(X) ->
-    {ok, math:acos(X)}.  
+    math:acos(X).  
 
 asin(X) ->
-    {ok, math:asin(X)}. 
+    math:asin(X). 
 
 atan(X) ->
-    {ok, math:atan(X)}.  
+    math:atan(X).  
 
-atan2(Y, X) ->
-    {ok, math:atan2(Y, X)}. 
+atan2(X, Y) ->
+    math:atan2(X, Y). 
 
 ceil(X) ->
-    round(X + 0.5).  
+    erlang:round(X + 0.5).  
 
 cos(X) ->
     math:cos(X). 
@@ -79,7 +79,7 @@ exp(X) ->
     math:exp(X). 
 
 floor(X) ->
-    round(X - 0.5). 
+    erlang:round(X - 0.5). 
 
 log(X) ->
     math:log(X). 
@@ -103,7 +103,7 @@ random() ->
     random:uniform(). 
 
 round(X) ->
-    round(X). 
+    erlang:round(X). 
 
 sin(X) ->
     math:sin(X).

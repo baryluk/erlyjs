@@ -38,8 +38,8 @@
     parse/1]).
  
 now() ->
-    {MSecs, Secs, _} = now(),
-    {ok, 1000000 * MSecs + Secs}.   
+    {MSecs, Secs, _} = erlang:now(),
+    1000000 * MSecs + Secs.   
     
 parse(_DateStr) ->
     exit(not_implemented_yet).
