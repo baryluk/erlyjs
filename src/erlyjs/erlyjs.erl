@@ -42,7 +42,8 @@
     create_lexer/0, 
     create_parser/0, 
     lexer_src/0, 
-    parser_src/0]).
+    parser_src/0,
+    dump_src/1]).
 
 
 compile(File, Module) ->
@@ -84,7 +85,17 @@ lexer_src() ->
      filename:join(src_erlyjs_dir(), "erlyjs_lexer.xrl").
 
 parser_src() ->
-     filename:join(src_erlyjs_dir(), "erlyjs_parser.yrl").
+     filename:join(src_erlyjs_dir(), "erlyjs_parser.yrl"). 
+     
+ 
+dump_src(Module) ->  
+    Beam = filename:join(["ebin", lists:concat([Module, ".beam"])]),
+    case beam_lib:chunks(Beam, [abstract_code]) of
+        {ok,{_,[{abstract_code,{_,AC}}]}} ->  
+            io:put_chars(erl_prettypr:format(erl_syntax:form_list(AC)));
+        _ ->
+            io:format("~p~n",["No source code found"]) 
+   end.
     
     
 %%====================================================================

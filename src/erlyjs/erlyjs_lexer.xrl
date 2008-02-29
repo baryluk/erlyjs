@@ -38,9 +38,8 @@
 Definitions.
 
 Digit = [0-9]
-Uppercase = [A-Z]
-Lowercase = [a-z]
-Underscore = [_]
+UpperC = [A-Z]
+LowerC = [a-z]
 Whitespace = [\000-\s]
 
 String = "(\\\^.|\\.|[^"])*"
@@ -59,17 +58,8 @@ Rules.
 {Quote} : build_string(TokenChars, TokenLine, TokenLen).
 
 {Comment} : skip_token.     
-
-%% TODO: fix build_identifier
-%% Variables: first: letter, underscore (_), or dollar sign ($)
-%%            following: as first, but number are allowed as well
-%% Function-names: ????
-%% Objectnames: ????
-%% examples:
-%% ({Small}({Small}|{Big}|{Dig}|_)*) : {token, {atom,YYline, YYtext}}.
-%% ({Big}({Small} | {Big}|{Dig} | _)*) : {token, special(YYtext, YYline)}
-
-({Uppercase}|{Lowercase}|{Underscore})* : build_identifier(TokenChars, TokenLine).  %% TOOO: needs to be fixed
+   
+({UpperC}|{LowerC}|_|\$)({UpperC}|{Digit}|{LowerC}|_|\$)* : build_identifier(TokenChars, TokenLine). 
 
 {Whitespace}+ : skip_token.
 

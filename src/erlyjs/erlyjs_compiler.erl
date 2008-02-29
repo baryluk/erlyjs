@@ -184,8 +184,8 @@ forms(Checksum, Module, FuncAsts, Info) ->
 
 compile_forms(Forms, Ctx) ->  
     CompileOptions = case Ctx#js_ctx.verbose of
-        true -> [verbose, report_errors, report_warnings];
-        _ -> []
+        true -> [debug_info, verbose, report_errors, report_warnings];
+        _ -> [debug_info]
     end,  
     case compile:forms(Forms, CompileOptions) of
         {ok, Module1, Bin} -> 
@@ -480,8 +480,10 @@ func_name(Trav) ->
       
 var_ast(Key, #js_ctx{action = set} = Ctx, Trav) ->
     Scope = hd(Trav#trav.js_scopes),
-    ErlNamePostfix = tl(atom_to_list(erl_syntax_lib:new_variable_name(Trav#trav.names_set))),  
-    ErlName = lists:concat(["V_", Key, "_", ErlNamePostfix]),
+    %% TODO: sort this out
+    %% ErlNamePostfix = tl(atom_to_list(erl_syntax_lib:new_variable_name(Trav#trav.names_set))),  
+    %% ErlName = lists:concat(["V_", Key, "_", ErlNamePostfix]), 
+    ErlName = atom_to_list(erl_syntax_lib:new_variable_name(Trav#trav.names_set)), 
     Dict = dict:store(Key, ErlName, Scope#scope.names_dict),
     Names = case Trav#trav.names of
         [] ->
@@ -740,7 +742,7 @@ get_mod_func('Math', [acos], 1) -> {erlyjs_global_math, acos};
 get_mod_func('Math', [asin], 1) -> {erlyjs_global_math, asin};    
 get_mod_func('Math', [atan], 1) -> {erlyjs_global_math, atan};    
 get_mod_func('Math', [atan2], 2) -> {erlyjs_global_math, atan2};    
-get_mod_func('Math', [ceils], 1) -> {erlyjs_global_math, ceil};    
+get_mod_func('Math', [ceil], 1) -> {erlyjs_global_math, ceil};    
 get_mod_func('Math', [cos], 1) -> {erlyjs_global_math, cos};    
 get_mod_func('Math', [exp], 1) -> {erlyjs_global_math, exp};    
 get_mod_func('Math', [floor], 1) -> {erlyjs_global_math, floor};    
