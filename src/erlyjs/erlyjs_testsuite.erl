@@ -136,7 +136,7 @@ fold_tests(RegExp, Verbose, Dir) ->
 
     
 test(File, Verbose) ->
-	Module = filename:rootname(filename:basename(File)),
+	Module = "js_" ++ filename:rootname(filename:basename(File)),
 	io:format("Compiling: ~p ... ",[Module]),  
 	Options = [{force_recompile, true}, {verbose, Verbose}],
 	case erlyjs_compiler:compile(File, Module, Options) of
