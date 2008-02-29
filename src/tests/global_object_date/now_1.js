@@ -21,8 +21,7 @@ function test_ok() {
 // Testsuite invokes this function with the arguments from test_args()
 // and compares the return value with the expected result from test_result().
 function test() {
-    // var a = Date.now();    
-    // var b = Date.now();
-    // return  b > a;
-    return true;
+    var a = Date.now();    
+    var b = Date.now();
+    return  b >= a;
 }

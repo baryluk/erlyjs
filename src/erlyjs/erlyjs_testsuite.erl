@@ -135,13 +135,12 @@ fold_tests(RegExp, Verbose, Dir) ->
         end, {0, []}).    
 
     
-test(File, Verbose) -> 
+test(File, Verbose) ->
 	Module = filename:rootname(filename:basename(File)),
 	io:format("Compiling: ~p ... ",[Module]),  
 	Options = [{force_recompile, true}, {verbose, Verbose}],
 	case erlyjs_compiler:compile(File, Module, Options) of
 	    ok ->
-	        ProcessDict = get(),
 	        M = list_to_atom(Module),
 	        Expected = M:js_test_ok(),
 	        Args = M:js_test_args(),
@@ -164,12 +163,7 @@ test(File, Verbose) ->
 	                {error, "test failed: " ++ Module ++ " Result: " ++ Other}
 	        end,
 	        M:jsreset(),
-	        case get() of
-	            ProcessDict ->
-	                Result;
-	            _ ->
-	                {error, "test failed: " ++ Module ++ " (dirty Process Dictionary)"}
-	        end;	                
+	        Result;               
 	    Err ->
 	       Err 
 	end.

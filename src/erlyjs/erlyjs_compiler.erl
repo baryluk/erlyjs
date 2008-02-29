@@ -55,9 +55,9 @@
     names_dict = dict:new()}).  %%  Key: JsName, Value: ErlName
     
 -record(trav, {                 %%  traverses the whole tree
-    names_set = sets:new(),     %%  for unique Erlang variable names 
     js_scopes = [#scope{}],     %%  for Javascript variables scopes
-    names = [],                 %%  for temporary use: [{JsNameAsKey, ErlName}, ...]
+    names = [],                 %%  for temporary use: [{JsNameAsKey, ErlName}, ...]     
+    var_counter = 0,            %%  for unique Erlang variable names
     func_counter = 0}).         %%  for unique internal Erlang function names
  
  
@@ -264,51 +264,49 @@ ast({var, DeclarationList}, {Ctx, Trav}) ->
     {Ast, Inf, Trav1} = p_t(DeclarationList, Ctx#js_ctx{action = set}, Trav),         
     maybe_global({{Ast, Inf}, {Ctx, Trav1}});    
 ast(return, {Ctx, Trav}) -> 
-    %% TODO: eliminate this clause by adjusting the grammar
+    %% TODO: implement 'throw' to make this work
     empty_ast(Ctx, Trav);
-ast({return, Expression}, {Ctx, Trav}) -> 
-    %% TODO: implementation and tests, this doesnt't work generally
+ast({return, Expression}, {Ctx, Trav}) ->
     ast(Expression, {Ctx, Trav});
 ast({function, {identifier, _L2, Name}, {params, Params, body, Body}}, {Ctx, Trav}) ->
     func(Name, Params, Body, Ctx, Trav);   
 ast({op, {Op, _}, In}, {Ctx, Trav}) ->
-    {Out, _, #trav{names_set = Set}} = p_t(In, Ctx, Trav),
-    {{erlyjs_operators:ast(Op, Out), #ast_inf{}}, {Ctx, Trav#trav{names_set = Set}}};
+    {Out, _, Trav2} = p_t(In, Ctx, Trav),
+    {{erlyjs_operators:ast(Op, Out), #ast_inf{}}, {Ctx, Trav2}};
 ast({op, {Op, _}, In1, In2}, {Ctx, Trav}) ->
-    {Out1, _, #trav{names_set = Set1}} = p_t(In1, Ctx, Trav),
-    {Out2, _, #trav{names_set = Set2}} = p_t(In2, Ctx, Trav#trav{names_set = Set1}),
-    {{erlyjs_operators:ast(Op, Out1, Out2), #ast_inf{}}, {Ctx, Trav#trav{names_set = Set2}}};
+    {Out1, _, Trav2} = p_t(In1, Ctx, Trav),
+    {Out2, _, Trav3} = p_t(In2, Ctx, Trav2),
+    {{erlyjs_operators:ast(Op, Out1, Out2), #ast_inf{}}, {Ctx, Trav3}};
 ast({op, {{Op, postfix}, _}, In1, In2}, {Ctx, Trav}) ->
     %% TODO: fix this, code below is prefix operator
-    {Out1, _, #trav{names_set = Set1}} = p_t(In1, Ctx, Trav),
-    {Out2, _, #trav{names_set = Set2}} = p_t(In2, Ctx, Trav#trav{names_set = Set1}),
-    {{erlyjs_operators:ast(Op, Out1, Out2), #ast_inf{}}, {Ctx, Trav#trav{names_set = Set2}}};
+    {Out1, _, Trav2} = p_t(In1, Ctx, Trav),
+    {Out2, _, Trav3} = p_t(In2, Ctx, Trav2),
+    {{erlyjs_operators:ast(Op, Out1, Out2), #ast_inf{}}, {Ctx, Trav3}};
 ast({op, Op, In1, In2, In3}, {Ctx, Trav}) ->
-    {Out1, _, #trav{names_set = Set1}} = p_t(In1, Ctx, Trav),
-    {Out2, _, #trav{names_set = Set2}} = p_t(In2, Ctx, Trav#trav{names_set = Set1}),
-    {Out3, _, #trav{names_set = Set3}} = p_t(In3, Ctx, Trav#trav{names_set = Set2}),
-    {{erlyjs_operators:ast(Op, Out1, Out2, Out3), #ast_inf{}}, {Ctx, Trav#trav{names_set = Set3}}}; 
+    {Out1, _, Trav2} = p_t(In1, Ctx, Trav),
+    {Out2, _, Trav3} = p_t(In2, Ctx, Trav2),
+    {Out3, _, Trav4} = p_t(In3, Ctx, Trav3),
+    {{erlyjs_operators:ast(Op, Out1, Out2, Out3), #ast_inf{}}, {Ctx, Trav4}}; 
 ast({assign, {'=', _}, {identifier, _, Name}, In1}, {Ctx, Trav}) ->  
-    {{Out2, _}, {_, Trav1}} = var_ast(Name, Ctx#js_ctx{action = set}, Trav),  
-    {Out3, Inf, _} = p_t(In1, Ctx, Trav),  
-    assign_ast('=', Name, Out2, Out3, Inf, Ctx, Trav1);
+    {{Out2, _}, {_, Trav2}} = var_ast(Name, Ctx#js_ctx{action = set}, Trav),  
+    {Out3, Inf, Trav3} = p_t(In1, Ctx, Trav2),  
+    assign_ast('=', Name, Out2, Out3, Inf, Ctx, Trav3);
 ast({assign, {Op, _}, {identifier, _, Name}, In1}, {Ctx, Trav}) ->  
-    {{Out2, _}, _} = var_ast(Name, Ctx, Trav),  
-    {Out3, Inf, Trav1} = p_t(In1, Ctx, Trav),    
-    {{Out4, _}, {_, Trav2}} = var_ast(Name, Ctx#js_ctx{action = set}, Trav1), 
-    assign_ast('=', Name, Out4, erlyjs_operators:ast(assign_to_op(Op), Out2, Out3), Inf, Ctx, Trav2);  
+    {{Out2, _}, {_, Trav2}} = var_ast(Name, Ctx, Trav),  
+    {Out3, Inf, Trav3} = p_t(In1, Ctx, Trav2),    
+    {{Out4, _}, {_, Trav4}} = var_ast(Name, Ctx#js_ctx{action = set}, Trav3), 
+    assign_ast('=', Name, Out4, erlyjs_operators:ast(assign_to_op(Op), Out2, Out3), Inf, Ctx, Trav4);  
 ast({'if', Cond, Stmt}, {#js_ctx{global = true} = Ctx, Trav}) -> 
-    {Cond2, _, #trav{names_set = Set}} = p_t(Cond, Ctx, Trav),
-    Trav2 = Trav#trav{names_set = Set, names = add_names(Trav)},
-    {Stmt2, _, Trav3} = p_t(Stmt, Ctx, Trav2),
+    {Cond2, _, Trav2} = p_t(Cond, Ctx, Trav),
+    {Stmt2, _, Trav3} = p_t(Stmt, Ctx, Trav2#trav{names = add_names(Trav2)}),
     ReturnVarsElse = get_vars_init(Trav, Trav3, Ctx),                                        
     Ast = erl_syntax:case_expr(Cond2, [
         erl_syntax:clause([erl_syntax:atom(true)], none, [Stmt2]),
         erl_syntax:clause([erl_syntax:underscore()], none, [ReturnVarsElse])]),
     {{[], #ast_inf{global_asts = [Ast]}}, {Ctx, trav_clean(Trav3)}};    
 ast({'if', Cond, Stmt}, {Ctx, Trav}) -> 
-    {Cond2, _, #trav{names_set = Set}} = p_t(Cond, Ctx, Trav),
-    TravIfIn = Trav#trav{names_set = Set, names = add_names(Trav)},   
+    {Cond2, _, #trav{var_counter = VarCounter}} = p_t(Cond, Ctx, Trav),
+    TravIfIn = Trav#trav{var_counter = VarCounter, names = add_names(Trav)},   
     {Stmt2, _, Trav2} = p_t(Stmt, Ctx, TravIfIn),     
     NameKeys = get_name_keys(Trav2),               
     [ReturnVarsIf] = get_vars_list(NameKeys, [Trav2], Trav, Ctx),                  
@@ -319,20 +317,20 @@ ast({'if', Cond, Stmt}, {Ctx, Trav}) ->
         erl_syntax:clause([erl_syntax:underscore()], none, [ReturnVarsElse])])),   
      {{Ast, #ast_inf{}}, {Ctx, trav_clean(Trav3)}};    
 ast({'ifelse', Cond, StmtIf, StmtElse}, {#js_ctx{global = true} = Ctx, Trav}) ->
-    {Cond2, _, #trav{names_set = Set}} = p_t(Cond, Ctx, Trav),
-    TravIfIn = Trav#trav{names_set = Set, names = add_names(Trav)},
-    {StmtIf2, _, #trav{names_set = Set2}} = p_t(StmtIf, Ctx, TravIfIn), 
-    TravElseIn = Trav#trav{names_set = Set2, names = add_names(Trav)},
+    {Cond2, _, #trav{var_counter = VarCounter}} = p_t(Cond, Ctx, Trav),
+    TravIfIn = Trav#trav{var_counter = VarCounter, names = add_names(Trav)},
+    {StmtIf2, _, #trav{var_counter = VarCounter2}} = p_t(StmtIf, Ctx, TravIfIn), 
+    TravElseIn = Trav#trav{var_counter = VarCounter2, names = add_names(Trav)},
     {StmtElse2, _, Trav3} = p_t(StmtElse, Ctx, TravElseIn),             
     Ast = erl_syntax:case_expr(Cond2, [
         erl_syntax:clause([erl_syntax:atom(true)], none, [StmtIf2]),
         erl_syntax:clause([erl_syntax:underscore()], none, [StmtElse2])]),       
     {{[], #ast_inf{global_asts = [Ast]}}, {Ctx, trav_clean(Trav3)}};    
 ast({'ifelse', Cond, StmtIf, StmtElse}, {Ctx, Trav}) ->
-    {Cond2, _, #trav{names_set = Set}} = p_t(Cond, Ctx, Trav),
-    TravIfIn = Trav#trav{names_set = Set, names = add_names(Trav)},
-    {StmtIf2, _, #trav{names_set = Set1} = Trav2} = p_t(StmtIf, Ctx, TravIfIn), 
-    TravElseIn = Trav#trav{names_set = Set1, names = add_names(Trav)},
+    {Cond2, _, #trav{var_counter = VarCounter}} = p_t(Cond, Ctx, Trav),
+    TravIfIn = Trav#trav{var_counter = VarCounter, names = add_names(Trav)},
+    {StmtIf2, _, #trav{var_counter = VarCounter1} = Trav2} = p_t(StmtIf, Ctx, TravIfIn), 
+    TravElseIn = Trav#trav{var_counter = VarCounter1, names = add_names(Trav)},
     {StmtElse2, _, Trav3} = p_t(StmtElse, Ctx, TravElseIn),    
     NameKeys = get_name_keys(Trav2, Trav3),     
     [ReturnVarsIf, ReturnVarsElse] = get_vars_list(NameKeys, [Trav2, Trav3], Trav, Ctx),  
@@ -370,9 +368,9 @@ ast({do_while, Stmt, Cond}, {Ctx, Trav}) ->
         erl_syntax:application(none, func_name(Trav2), [VarsBefore])),  
     {{[Ast], #ast_inf{internal_func_asts = [Func]}}, {Ctx, trav_clean(Trav4)}};       
 ast({while, Cond, Stmt}, {#js_ctx{global = true} = Ctx, Trav}) ->        
-    {OutCond, _, #trav{names_set = Set}} = p_t(Cond, Ctx, Trav),
+    {OutCond, _, #trav{var_counter = VarCounter}} = p_t(Cond, Ctx, Trav),
     Trav2 = Trav#trav{
-        names_set = Set, 
+        var_counter = VarCounter, 
         names = add_names(Trav),
         func_counter = wrap_inc_func_counter(Trav)},
     {OutStmt, _, Trav3} = p_t(Stmt, Ctx, Trav2),
@@ -386,9 +384,9 @@ ast({while, Cond, Stmt}, {#js_ctx{global = true} = Ctx, Trav}) ->
     Ast = erl_syntax:application(none, func_name(Trav3), []),        
     {{[], #ast_inf{internal_func_asts = [Func], global_asts = [Ast]}}, {Ctx, trav_clean(Trav3)}};      
 ast({while, Cond, Stmt}, {Ctx, Trav}) ->
-    {OutCond, _, #trav{names_set = Set}} = parse_transform(Cond, Ctx, Trav),
+    {OutCond, _, #trav{var_counter = VarCounter}} = parse_transform(Cond, Ctx, Trav),
     Trav2 = Trav#trav{
-        names_set = Set, 
+        var_counter = VarCounter, 
         names = add_names(Trav),
         func_counter = wrap_inc_func_counter(Trav)},
     {OutStmt, _, Trav3} = p_t(Stmt, Ctx, Trav2),
@@ -480,21 +478,18 @@ func_name(Trav) ->
       
 var_ast(Key, #js_ctx{action = set} = Ctx, Trav) ->
     Scope = hd(Trav#trav.js_scopes),
-    %% TODO: sort this out
-    %% ErlNamePostfix = tl(atom_to_list(erl_syntax_lib:new_variable_name(Trav#trav.names_set))),  
-    %% ErlName = lists:concat(["V_", Key, "_", ErlNamePostfix]), 
-    ErlName = atom_to_list(erl_syntax_lib:new_variable_name(Trav#trav.names_set)), 
+    {ErlName, Trav2} = build_var_name(Key, Trav),
     Dict = dict:store(Key, ErlName, Scope#scope.names_dict),
-    Names = case Trav#trav.names of
+    Names = case Trav2#trav.names of
         [] ->
             [];
         Val ->
             [dict:store(Key, ErlName, hd(Val)) | tl(Val)]
     end,
-    Trav2 = Trav#trav{names_set = sets:add_element(ErlName, Trav#trav.names_set), 
+    Trav3 = Trav2#trav{
         js_scopes = [#scope{names_dict = Dict} | tl(Trav#trav.js_scopes)],
         names = Names},
-    {{erl_syntax:variable(ErlName), #ast_inf{}}, {Ctx, Trav2}}; 
+    {{erl_syntax:variable(ErlName), #ast_inf{}}, {Ctx, Trav3}}; 
     
 var_ast(undefined, #js_ctx{action = get} = Ctx, Trav) ->
     {{erl_syntax:atom(undefined), #ast_inf{}}, {Ctx, Trav}};
@@ -634,8 +629,8 @@ get_global_vars(Trav) ->
 get_vars_result(Trav, TravSet, Ctx) ->
     get_vars_result(get_name_keys(Trav), Trav, TravSet, Ctx).
     
-get_vars_result(NameKeys, Trav, TravSet, Ctx) ->
-    TravInit = Trav#trav{names_set = TravSet#trav.names_set},        
+get_vars_result(NameKeys, Trav, TravInit, Ctx) ->
+    TravInit = Trav#trav{var_counter = TravInit#trav.var_counter},        
     {VarsAfter, Trav2} = lists:mapfoldl(
         fun
             (Key, AccTravIn) ->
@@ -646,7 +641,8 @@ get_vars_result(NameKeys, Trav, TravSet, Ctx) ->
                 
 
                                        
-get_switch_clause_list(CaseList, Trav, Ctx) ->
+get_switch_clause_list(CaseList, Trav, Ctx) ->   
+    %% TODO: eliminte possibility of inner shadow variables
     lists:mapfoldl(   
         fun      
             ({default, StmtsIn}, AccTravIn) ->  
@@ -708,14 +704,16 @@ call(Name, DotSepNames, Args, Ctx, Trav) ->
     Arity = length(Args),
     case get_mod_func(Name, DotSepNames, Arity) of
         {Mod, Func} ->
-            {Args2, _, Trav1} = p_t(Args, Ctx, Trav),    
+            {VarVal, Trav2} = build_var_name("Val", Trav),
+            {VarErr, Trav3} = build_var_name("Err", Trav2),
+            {Args2, _, Trav4} = p_t(Args, Ctx, Trav3),    
             FuncAst = erl_syntax:application(erl_syntax:atom(Mod), erl_syntax:atom(Func), Args2),
-            ClauseOk = erl_syntax:clause([erl_syntax:variable("Val")], 
-                none, [erl_syntax:variable("Val")]),
-            ClauseCatch = erl_syntax:clause([erl_syntax:variable("Err")], none,
-                [erl_syntax:tuple([erl_syntax:atom(error), erl_syntax:variable("Err")])]),
+            ClauseOk = erl_syntax:clause([erl_syntax:variable(VarVal)], 
+                none, [erl_syntax:variable(VarVal)]),
+            ClauseCatch = erl_syntax:clause([erl_syntax:variable(VarErr)], none,
+                [erl_syntax:tuple([erl_syntax:atom(error), erl_syntax:variable(VarErr)])]),
             Ast = erl_syntax:try_expr([FuncAst], [ClauseOk], [ClauseCatch]),                
-            maybe_global({{Ast, #ast_inf{}}, {Ctx, Trav1}});
+            maybe_global({{Ast, #ast_inf{}}, {Ctx, Trav4}});
         _ ->  
             throw({error, lists:concat(["No such function: ", 
                 pprint_name(Name, DotSepNames, Arity)])})
@@ -804,8 +802,14 @@ assign_to_op(Assign) ->
     
 
 global_prefix(Name) ->
-    lists:concat(["js_", Name]).
-                  
+    lists:concat(["js_", Name]).   
+     
+
+build_var_name(Key, Trav) ->
+   ErlName = lists:concat(["V", Trav#trav.var_counter, "_", Key]),
+   {ErlName, Trav#trav{var_counter = Trav#trav.var_counter + 1}}.
+   
+              
 %% TODO: eliminate 
 add_names(Trav) -> [dict:new() | Trav#trav.names].
 
