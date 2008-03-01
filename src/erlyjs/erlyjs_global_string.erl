@@ -82,7 +82,7 @@ concat(_Strings) ->
 indexOf(String, SearchValue) -> 
     case string:str(String, SearchValue) of
         0 -> -1;
-        Val -> Val
+        Val -> Val - 1
     end.
 
 indexOf(_Str, _SearchValue, _FromIndex) ->
@@ -94,7 +94,7 @@ indexOf(_Str, _SearchValue, _FromIndex) ->
 lastIndexOf(String, SearchValue) ->
     case string:rstr(String, SearchValue) of
         0 -> -1;
-        Val -> Val
+        Val -> Val - 1
     end.
 
 lastIndexOf(_String, _SearchValue, _FromIndex) ->

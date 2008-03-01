@@ -255,8 +255,8 @@ ast({identifier, _, Name}, {Ctx, Trav}) ->
     var_ast(Name, Ctx, Trav);
 ast({{identifier, _, Name} , {'(', Args}}, {Ctx, Trav}) ->
     call(Name, [], Args, Ctx, Trav);                                                                 
-ast({{{identifier, _, Name}, Names}, {'(', Args}}, {Ctx, Trav}) ->
-    call(Name, Names, Args, Ctx, Trav);  
+ast({{Token, Names}, {'(', Args}}, {Ctx, Trav}) ->
+    call(Token, Names, Args, Ctx, Trav);  
 ast({{identifier, _, Name}, Value}, {Ctx, Trav}) -> 
     var_declare(Name, Value, Ctx, Trav);  
 ast({var, DeclarationList}, {Ctx, Trav}) ->     
@@ -699,8 +699,8 @@ func(Name, Params, Body, Ctx, Trav) ->
             {{Ast1, Inf}, {Ctx, Trav}}
     end.
     
-         
-call(Name, DotSepNames, Args, Ctx, Trav) ->
+%% TODO: refactor to reduce code redundancy       
+call({identifier, _, Name}, DotSepNames, Args, Ctx, Trav) ->  
     Arity = length(Args), 
     case get_mod_func(Name, DotSepNames, Arity) of
         {Mod, Func} ->
@@ -729,7 +729,36 @@ call(Name, DotSepNames, Args, Ctx, Trav) ->
         _ ->  
             throw({error, lists:concat(["No such function: ", 
                 pprint_name(Name, DotSepNames, Arity)])})
-    end.    
+    end;  
+call({string, _, String}, DotSepNames, Args, Ctx, Trav) ->  
+    Arity = length(Args), 
+    case get_mod_func(String, DotSepNames, Arity) of
+        {Mod, Func} ->
+            {VarVal, Trav2} = build_var_name("Val", Trav),
+            {VarErr, Trav3} = build_var_name("Err", Trav2),
+            {Args2, _, Trav4} = p_t(Args, Ctx, Trav3),    
+            FuncAst = erl_syntax:application(erl_syntax:atom(Mod), erl_syntax:atom(Func), Args2),
+            ClauseOk = erl_syntax:clause([erl_syntax:variable(VarVal)], 
+                none, [erl_syntax:variable(VarVal)]),
+            ClauseCatch = erl_syntax:clause([erl_syntax:variable(VarErr)], none,
+                [erl_syntax:tuple([erl_syntax:atom(error), erl_syntax:variable(VarErr)])]),
+            Ast = erl_syntax:try_expr([FuncAst], [ClauseOk], [ClauseCatch]),                
+            maybe_global({{Ast, #ast_inf{}}, {Ctx, Trav4}});  
+        {Mod, Func, Arg} ->   
+            {VarVal, Trav2} = build_var_name("Val", Trav),
+            {VarErr, Trav3} = build_var_name("Err", Trav2),          
+            {Args2, _, Trav4} = p_t(Args, Ctx, Trav3),    
+            FuncAst = erl_syntax:application(erl_syntax:atom(Mod), erl_syntax:atom(Func), [erl_syntax:string(String) | Args2]),
+            ClauseOk = erl_syntax:clause([erl_syntax:variable(VarVal)], 
+                none, [erl_syntax:variable(VarVal)]),
+            ClauseCatch = erl_syntax:clause([erl_syntax:variable(VarErr)], none,
+                [erl_syntax:tuple([erl_syntax:atom(error), erl_syntax:variable(VarErr)])]),
+            Ast = erl_syntax:try_expr([FuncAst], [ClauseOk], [ClauseCatch]),                
+            maybe_global({{Ast, #ast_inf{}}, {Ctx, Trav4}});
+        _ ->  
+            throw({error, lists:concat(["No such function: ", 
+                pprint_name(String, DotSepNames, Arity)])})
+    end.      
         
    
 get_mod_func(decodeURI, [], 1) -> {erlyjs_global, decodeURI};
@@ -769,9 +798,11 @@ get_mod_func('Math', [tan], 1) -> {erlyjs_global_math, tan};
 get_mod_func('String', [charAt], 1) -> {erlyjs_global_string, charAt};   
 get_mod_func('String', [charCodeAt], 1) -> {erlyjs_global_string, charCodeAt};  
 get_mod_func('String', [concat], 1) -> {erlyjs_global_string, concat};  
-get_mod_func('String', [indexOf], 2) -> {erlyjs_global_string, indexOf}; 
+%% get_mod_func('String', [indexOf], 2) -> {erlyjs_global_string, indexOf};   % ??? delete ???  
+get_mod_func(Name, [indexOf], 1) -> {erlyjs_global_string, indexOf, Name};  
 get_mod_func('String', [indexOf], 3) -> {erlyjs_global_string, indexOf}; 
-get_mod_func('String', [lastIndexOf], 2) -> {erlyjs_global_string, lastIndexOf}; 
+%% get_mod_func('String', [lastIndexOf], 2) -> {erlyjs_global_string, lastIndexOf};   % ??? delete ???   
+get_mod_func(Name, [lastIndexOf], 1) -> {erlyjs_global_string, lastIndexOf, Name};  
 get_mod_func('String', [lastIndexOf], 3) -> {erlyjs_global_string, lastIndexOf};
 get_mod_func('String', [localeCompare], 1) -> {erlyjs_global_string, localeCompare};
 get_mod_func('String', [match], 1) -> {erlyjs_global_string, match}; 
