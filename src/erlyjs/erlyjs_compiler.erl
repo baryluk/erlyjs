@@ -252,11 +252,13 @@ ast({{identifier, _, 'Infinity'}, _}, {Ctx, Trav}) ->
 ast({{identifier, _, 'NaN'}, _}, {Ctx, Trav}) ->  
     {{erl_syntax:atom('NaN'), #ast_inf{}}, {Ctx, Trav}};
 ast({identifier, _, Name}, {Ctx, Trav}) ->  
-    var_ast(Name, Ctx, Trav);
+    var_ast(Name, Ctx, Trav);              
 ast({{identifier, _, Name} , {'(', Args}}, {Ctx, Trav}) ->
     call(Name, [], Args, Ctx, Trav);                                                                 
-ast({{Token, Names}, {'(', Args}}, {Ctx, Trav}) ->
-    call(Token, Names, Args, Ctx, Trav);  
+ast({{{string, _, String}, Names}, {'(', Args}}, {Ctx, Trav}) ->
+    call(string, String, Names, Args, Ctx, Trav);
+ast({{{identifier, _, Name}, Names}, {'(', Args}}, {Ctx, Trav}) ->
+    call(Name, Names, Args, Ctx, Trav);      
 ast({{identifier, _, Name}, Value}, {Ctx, Trav}) -> 
     var_declare(Name, Value, Ctx, Trav);  
 ast({var, DeclarationList}, {Ctx, Trav}) ->     
@@ -699,68 +701,51 @@ func(Name, Params, Body, Ctx, Trav) ->
             {{Ast1, Inf}, {Ctx, Trav}}
     end.
     
-%% TODO: refactor to reduce code redundancy       
-call({identifier, _, Name}, DotSepNames, Args, Ctx, Trav) ->  
+
+call(string, String, DotSepNames, Args, Ctx, Trav) ->  
+    Arity = length(Args), 
+    case get_mod_func(String, DotSepNames, Arity) of
+        {Mod, Func, _} ->
+            call2(Mod, Func, erl_syntax:string(String), Args, Ctx, Trav);
+        _ ->  
+            throw({error, lists:concat(["No such function: ", 
+                pprint_name("String", DotSepNames, Arity)])})
+    end.
+    
+call(Name, DotSepNames, Args, Ctx, Trav) -> 
     Arity = length(Args), 
     case get_mod_func(Name, DotSepNames, Arity) of
-        {Mod, Func} ->
-            {VarVal, Trav2} = build_var_name("Val", Trav),
-            {VarErr, Trav3} = build_var_name("Err", Trav2),
-            {Args2, _, Trav4} = p_t(Args, Ctx, Trav3),    
-            FuncAst = erl_syntax:application(erl_syntax:atom(Mod), erl_syntax:atom(Func), Args2),
-            ClauseOk = erl_syntax:clause([erl_syntax:variable(VarVal)], 
-                none, [erl_syntax:variable(VarVal)]),
-            ClauseCatch = erl_syntax:clause([erl_syntax:variable(VarErr)], none,
-                [erl_syntax:tuple([erl_syntax:atom(error), erl_syntax:variable(VarErr)])]),
-            Ast = erl_syntax:try_expr([FuncAst], [ClauseOk], [ClauseCatch]),                
-            maybe_global({{Ast, #ast_inf{}}, {Ctx, Trav4}});  
-        {Mod, Func, Arg} ->   
-            {VarVal, Trav2} = build_var_name("Val", Trav),
-            {VarErr, Trav3} = build_var_name("Err", Trav2),
-            {{VarArg, _}, _} = var_ast(Arg, Ctx, Trav),           
-            {Args2, _, Trav4} = p_t(Args, Ctx, Trav3),    
-            FuncAst = erl_syntax:application(erl_syntax:atom(Mod), erl_syntax:atom(Func), [VarArg | Args2]),
-            ClauseOk = erl_syntax:clause([erl_syntax:variable(VarVal)], 
-                none, [erl_syntax:variable(VarVal)]),
-            ClauseCatch = erl_syntax:clause([erl_syntax:variable(VarErr)], none,
-                [erl_syntax:tuple([erl_syntax:atom(error), erl_syntax:variable(VarErr)])]),
-            Ast = erl_syntax:try_expr([FuncAst], [ClauseOk], [ClauseCatch]),                
-            maybe_global({{Ast, #ast_inf{}}, {Ctx, Trav4}});
+        {Mod, Func} -> 
+            call2(Mod, Func, Args, Ctx, Trav);    
+        {Mod, Func, Arg} ->                                
+            {{VarArg, _}, _} = var_ast(Arg, Ctx, Trav), 
+            call2(Mod, Func, VarArg, Args, Ctx, Trav);
         _ ->  
             throw({error, lists:concat(["No such function: ", 
                 pprint_name(Name, DotSepNames, Arity)])})
-    end;  
-call({string, _, String}, DotSepNames, Args, Ctx, Trav) ->  
-    Arity = length(Args), 
-    case get_mod_func(String, DotSepNames, Arity) of
-        {Mod, Func} ->
-            {VarVal, Trav2} = build_var_name("Val", Trav),
-            {VarErr, Trav3} = build_var_name("Err", Trav2),
-            {Args2, _, Trav4} = p_t(Args, Ctx, Trav3),    
-            FuncAst = erl_syntax:application(erl_syntax:atom(Mod), erl_syntax:atom(Func), Args2),
-            ClauseOk = erl_syntax:clause([erl_syntax:variable(VarVal)], 
-                none, [erl_syntax:variable(VarVal)]),
-            ClauseCatch = erl_syntax:clause([erl_syntax:variable(VarErr)], none,
-                [erl_syntax:tuple([erl_syntax:atom(error), erl_syntax:variable(VarErr)])]),
-            Ast = erl_syntax:try_expr([FuncAst], [ClauseOk], [ClauseCatch]),                
-            maybe_global({{Ast, #ast_inf{}}, {Ctx, Trav4}});  
-        {Mod, Func, Arg} ->   
-            {VarVal, Trav2} = build_var_name("Val", Trav),
-            {VarErr, Trav3} = build_var_name("Err", Trav2),          
-            {Args2, _, Trav4} = p_t(Args, Ctx, Trav3),    
-            FuncAst = erl_syntax:application(erl_syntax:atom(Mod), erl_syntax:atom(Func), [erl_syntax:string(String) | Args2]),
-            ClauseOk = erl_syntax:clause([erl_syntax:variable(VarVal)], 
-                none, [erl_syntax:variable(VarVal)]),
-            ClauseCatch = erl_syntax:clause([erl_syntax:variable(VarErr)], none,
-                [erl_syntax:tuple([erl_syntax:atom(error), erl_syntax:variable(VarErr)])]),
-            Ast = erl_syntax:try_expr([FuncAst], [ClauseOk], [ClauseCatch]),                
-            maybe_global({{Ast, #ast_inf{}}, {Ctx, Trav4}});
-        _ ->  
-            throw({error, lists:concat(["No such function: ", 
-                pprint_name(String, DotSepNames, Arity)])})
-    end.      
-        
+    end.     
    
+call2(Mod, Func, Args, Ctx, Trav) ->             
+    {Args2, _, Trav2} = p_t(Args, Ctx, Trav),    
+    FuncAst = erl_syntax:application(erl_syntax:atom(Mod), erl_syntax:atom(Func), Args2),
+    call3(FuncAst, Ctx, Trav2).
+                
+call2(Mod, Func, Arg, Args, Ctx, Trav) ->             
+    {Args2, _, Trav2} = p_t(Args, Ctx, Trav),    
+    FuncAst = erl_syntax:application(erl_syntax:atom(Mod), erl_syntax:atom(Func), [Arg | Args2]),   
+    call3(FuncAst, Ctx, Trav2).   
+    
+call3(FuncAst, Ctx, Trav) ->     
+    {VarVal, Trav2} = build_var_name("Val", Trav),
+    {VarErr, Trav3} = build_var_name("Err", Trav2),
+    ClauseOk = erl_syntax:clause([erl_syntax:variable(VarVal)], 
+        none, [erl_syntax:variable(VarVal)]),
+    ClauseCatch = erl_syntax:clause([erl_syntax:variable(VarErr)], none,
+        [erl_syntax:tuple([erl_syntax:atom(error), erl_syntax:variable(VarErr)])]),
+    Ast = erl_syntax:try_expr([FuncAst], [ClauseOk], [ClauseCatch]),                
+    maybe_global({{Ast, #ast_inf{}}, {Ctx, Trav3}}).
+      
+       
 get_mod_func(decodeURI, [], 1) -> {erlyjs_global, decodeURI};
 get_mod_func(decodeURIComponent, [], 1) -> {erlyjs_global, decodeURIComponent};
 get_mod_func(encodeURI, [], 1) -> {erlyjs_global, encodeURI};
@@ -904,8 +889,8 @@ wrap_add_scope(Trav) -> Trav#trav{js_scopes = [#scope{} | Trav#trav.js_scopes]}.
 
 pprint_name(Name, [], Arity)  -> 
     lists:concat([Name, "/", Arity]);
-pprint_name(Name, DotSepNames, Arity)  ->
-    lists:concat([Name, ".", string:join([atom_to_list(X) || X <- DotSepNames], "."),"/", Arity]).
+pprint_name(_, DotSepNames, Arity)  ->
+    lists:concat([string:join([atom_to_list(X) || X <- DotSepNames], "."),"/", Arity]).
      
                    
 trace(Module, Line, Title, Content, Ctx) ->
