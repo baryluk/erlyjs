@@ -39,7 +39,6 @@
     out_dir = "ebin",
     global = false,  
     args = [],
-    api_namespace = [],
     reader = {file, read_file},
     action = get,
     force_recompile = false,
@@ -255,7 +254,7 @@ ast({{identifier, _, 'NaN'}, _}, {Ctx, Trav}) ->
 ast({identifier, _, Name}, {Ctx, Trav}) ->  
     var_ast(Name, Ctx, Trav);
 ast({{identifier, _, Name} , {'(', Args}}, {Ctx, Trav}) ->
-    call(Name, [], Args, Ctx, Trav);
+    call(Name, [], Args, Ctx, Trav);                                                                 
 ast({{{identifier, _, Name}, Names}, {'(', Args}}, {Ctx, Trav}) ->
     call(Name, Names, Args, Ctx, Trav);  
 ast({{identifier, _, Name}, Value}, {Ctx, Trav}) -> 
@@ -702,13 +701,25 @@ func(Name, Params, Body, Ctx, Trav) ->
     
          
 call(Name, DotSepNames, Args, Ctx, Trav) ->
-    Arity = length(Args),
+    Arity = length(Args), 
     case get_mod_func(Name, DotSepNames, Arity) of
         {Mod, Func} ->
             {VarVal, Trav2} = build_var_name("Val", Trav),
             {VarErr, Trav3} = build_var_name("Err", Trav2),
             {Args2, _, Trav4} = p_t(Args, Ctx, Trav3),    
             FuncAst = erl_syntax:application(erl_syntax:atom(Mod), erl_syntax:atom(Func), Args2),
+            ClauseOk = erl_syntax:clause([erl_syntax:variable(VarVal)], 
+                none, [erl_syntax:variable(VarVal)]),
+            ClauseCatch = erl_syntax:clause([erl_syntax:variable(VarErr)], none,
+                [erl_syntax:tuple([erl_syntax:atom(error), erl_syntax:variable(VarErr)])]),
+            Ast = erl_syntax:try_expr([FuncAst], [ClauseOk], [ClauseCatch]),                
+            maybe_global({{Ast, #ast_inf{}}, {Ctx, Trav4}});  
+        {Mod, Func, Arg} ->   
+            {VarVal, Trav2} = build_var_name("Val", Trav),
+            {VarErr, Trav3} = build_var_name("Err", Trav2),
+            {{VarArg, _}, _} = var_ast(Arg, Ctx, Trav),           
+            {Args2, _, Trav4} = p_t(Args, Ctx, Trav3),    
+            FuncAst = erl_syntax:application(erl_syntax:atom(Mod), erl_syntax:atom(Func), [VarArg | Args2]),
             ClauseOk = erl_syntax:clause([erl_syntax:variable(VarVal)], 
                 none, [erl_syntax:variable(VarVal)]),
             ClauseCatch = erl_syntax:clause([erl_syntax:variable(VarErr)], none,
@@ -758,10 +769,10 @@ get_mod_func('Math', [tan], 1) -> {erlyjs_global_math, tan};
 get_mod_func('String', [charAt], 1) -> {erlyjs_global_string, charAt};   
 get_mod_func('String', [charCodeAt], 1) -> {erlyjs_global_string, charCodeAt};  
 get_mod_func('String', [concat], 1) -> {erlyjs_global_string, concat};  
-get_mod_func('String', [indexOf], 1) -> {erlyjs_global_string, indexOf}; 
 get_mod_func('String', [indexOf], 2) -> {erlyjs_global_string, indexOf}; 
-get_mod_func('String', [lastIndexOf], 1) -> {erlyjs_global_string, lastIndexOf}; 
-get_mod_func('String', [lastIndexOf], 2) -> {erlyjs_global_string, lastIndexOf};
+get_mod_func('String', [indexOf], 3) -> {erlyjs_global_string, indexOf}; 
+get_mod_func('String', [lastIndexOf], 2) -> {erlyjs_global_string, lastIndexOf}; 
+get_mod_func('String', [lastIndexOf], 3) -> {erlyjs_global_string, lastIndexOf};
 get_mod_func('String', [localeCompare], 1) -> {erlyjs_global_string, localeCompare};
 get_mod_func('String', [match], 1) -> {erlyjs_global_string, match}; 
 get_mod_func('String', [replace], 2) -> {erlyjs_global_string, replace};      
@@ -776,10 +787,11 @@ get_mod_func('String', [substr], 2) -> {erlyjs_global_string, substr};
 get_mod_func('String', [substring], 1) -> {erlyjs_global_string, substring};   
 get_mod_func('String', [substring], 2) -> {erlyjs_global_string, substring}; 
 get_mod_func('String', [toLocaleLowerCase], 0) -> {erlyjs_global_string, toLocaleLowerCase};   
-get_mod_func('String', [toLocaleUpperCase], 0) -> {erlyjs_global_string, toLocaleUpperCase};   
-get_mod_func('String', [toLowerCase], 0) -> {erlyjs_global_string, toLowerCase};   
+%% get_mod_func('String', [toLocaleUpperCase], 0) -> {erlyjs_global_string, toLocaleUpperCase};  % ??? delete ??? 
+get_mod_func(Name, [toLowerCase], 0) -> {erlyjs_global_string, toLowerCase, Name};   
 get_mod_func('String', [toString], 0) -> {erlyjs_global_string, toString};   
-get_mod_func('String', [toUpperCase], 0) -> {erlyjs_global_string, toUpperCase};   
+%% get_mod_func('String', [toUpperCase], 1) -> {erlyjs_global_string, toUpperCase};  % ??? delete ??? 
+get_mod_func(Name, [toUpperCase], 0) -> {erlyjs_global_string, toUpperCase, Name};   
 get_mod_func('String', [valueOf], 0) -> {erlyjs_global_string, valueOf};    
 %%
 get_mod_func(load, [], 1)  -> {erlyjs_api, load};

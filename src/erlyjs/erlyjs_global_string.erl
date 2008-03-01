@@ -37,10 +37,10 @@
     charAt/1,
     charCodeAt/1,
     concat/1,
-    indexOf/1,
     indexOf/2,
-    lastIndexOf/1,
+    indexOf/3,
     lastIndexOf/2,
+    lastIndexOf/3,
     localeCompare/1,
     match/1,
     replace/2,
@@ -56,14 +56,14 @@
     substring/2, 
     toLocaleLowerCase/0,
     toLocaleUpperCase/0,
-    toLowerCase/0,
+    toLowerCase/1,
     toString/0,
-    toUpperCase/0,
+    toUpperCase/1,
     valueOf/0]).
      
  
 %% Returns the specified character from a string.
-charAt(Index) ->
+charAt(_Index) ->
     exit(not_implemented_yet).
  
     
@@ -79,19 +79,25 @@ concat(_Strings) ->
         
 %% Returns the index within the calling String object of the first occurrence of the specified value, 
 %% starting the search at fromIndex, or -1 if the value is not found.        
-indexOf(_SearchValue) ->
-    exit(not_implemented_yet).
+indexOf(String, SearchValue) -> 
+    case string:str(String, SearchValue) of
+        0 -> -1;
+        Val -> Val
+    end.
 
-indexOf(_SearchValue, _FromIndex) ->
+indexOf(_Str, _SearchValue, _FromIndex) ->
     exit(not_implemented_yet).
 
 
 %% Returns the index within the calling String object of the last occurrence of the specified value, 
 %% or -1 if not found. The calling string is searched backward, starting at fromIndex.                    
-lastIndexOf(_SearchValue) ->
-    exit(not_implemented_yet).
+lastIndexOf(String, SearchValue) ->
+    case string:rstr(String, SearchValue) of
+        0 -> -1;
+        Val -> Val
+    end.
 
-lastIndexOf(_SearchValue, _FromIndex) ->
+lastIndexOf(_String, _SearchValue, _FromIndex) ->
     exit(not_implemented_yet).
         
 
@@ -163,8 +169,8 @@ toLocaleUpperCase() ->
     
     
 %% Returns the calling string value converted to lower case.
-toLowerCase() ->
-    exit(not_implemented_yet).        
+toLowerCase(String) when is_list(String) ->
+    string:to_lower(String).        
 
 
 %% Returns a string representing the specified object. 
@@ -173,8 +179,8 @@ toString() ->
     
 
 %% Returns the calling string value converted to upper case.     
-toUpperCase() ->
-    exit(not_implemented_yet). 
+toUpperCase(String) ->
+    string:to_upper(String).  
     
 
 %% Returns the primitive value of a String object.
