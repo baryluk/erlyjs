@@ -271,34 +271,35 @@ ast({return, Expression}, {Ctx, Trav}) ->
 ast({function, {identifier, _L2, Name}, {params, Params, body, Body}}, {Ctx, Trav}) ->
     func(Name, Params, Body, Ctx, Trav);   
 ast({op, {Op, _}, In}, {Ctx, Trav}) ->
-    {Out, _, Trav2} = p_t(In, Ctx, Trav),
-    {{erlyjs_operators:ast(Op, Out), #ast_inf{}}, {Ctx, Trav2}};
-ast({op, {Op, _}, In1, In2}, {Ctx, Trav}) ->
-    {Out1, _, Trav2} = p_t(In1, Ctx, Trav),
-    {Out2, _, Trav3} = p_t(In2, Ctx, Trav2),
-    {{erlyjs_operators:ast(Op, Out1, Out2), #ast_inf{}}, {Ctx, Trav3}};
+    {Out, _, #trav{var_counter = VarCounter}} = p_t(In, Ctx, Trav),
+    {{erlyjs_operators:ast(Op, Out), #ast_inf{}}, {Ctx, Trav#trav{var_counter = VarCounter}}};
+ast({op, {Op, _}, In1, In2}, {Ctx, Trav}) -> 
+    {Out1, _, #trav{var_counter = VarCounter1}} = p_t(In1, Ctx, Trav),
+    {Out2, _, #trav{var_counter = VarCounter2}} = p_t(In2, Ctx, Trav#trav{var_counter = VarCounter1}),
+    {{erlyjs_operators:ast(Op, Out1, Out2), #ast_inf{}}, {Ctx, Trav#trav{var_counter = VarCounter2}}};
 ast({op, {{Op, postfix}, _}, In1, In2}, {Ctx, Trav}) ->
     %% TODO: fix this, code below is prefix operator
-    {Out1, _, Trav2} = p_t(In1, Ctx, Trav),
-    {Out2, _, Trav3} = p_t(In2, Ctx, Trav2),
-    {{erlyjs_operators:ast(Op, Out1, Out2), #ast_inf{}}, {Ctx, Trav3}};
-ast({op, Op, In1, In2, In3}, {Ctx, Trav}) ->
-    {Out1, _, Trav2} = p_t(In1, Ctx, Trav),
-    {Out2, _, Trav3} = p_t(In2, Ctx, Trav2),
-    {Out3, _, Trav4} = p_t(In3, Ctx, Trav3),
-    {{erlyjs_operators:ast(Op, Out1, Out2, Out3), #ast_inf{}}, {Ctx, Trav4}}; 
-ast({assign, {'=', _}, {identifier, _, Name}, In1}, {Ctx, Trav}) ->  
-    {{Out2, _}, {_, Trav2}} = var_ast(Name, Ctx#js_ctx{action = set}, Trav),  
-    {Out3, Inf, Trav3} = p_t(In1, Ctx, Trav2),  
-    assign_ast('=', Name, Out2, Out3, Inf, Ctx, Trav3);
-ast({assign, {Op, _}, {identifier, _, Name}, In1}, {Ctx, Trav}) ->  
-    {{Out2, _}, {_, Trav2}} = var_ast(Name, Ctx, Trav),  
-    {Out3, Inf, Trav3} = p_t(In1, Ctx, Trav2),    
-    {{Out4, _}, {_, Trav4}} = var_ast(Name, Ctx#js_ctx{action = set}, Trav3), 
-    assign_ast('=', Name, Out4, erlyjs_operators:ast(assign_to_op(Op), Out2, Out3), Inf, Ctx, Trav4);  
+    {Out1, _, #trav{var_counter = VarCounter1}} = p_t(In1, Ctx, Trav),
+    {Out2, _, #trav{var_counter = VarCounter2}} = p_t(In2, Ctx, Trav#trav{var_counter = VarCounter1}),
+    {{erlyjs_operators:ast(Op, Out1, Out2), #ast_inf{}}, {Ctx, Trav#trav{var_counter = VarCounter2}}};
+ast({op, Op, In1, In2, In3}, {Ctx, Trav}) ->  
+    {Out1, _, #trav{var_counter = VarCounter1}} = p_t(In1, Ctx, Trav),
+    {Out2, _, #trav{var_counter = VarCounter2}} = p_t(In2, Ctx, Trav#trav{var_counter = VarCounter1}),
+    {Out3, _, #trav{var_counter = VarCounter3}} = p_t(In3, Ctx, Trav#trav{var_counter = VarCounter2}),
+    {{erlyjs_operators:ast(Op, Out1, Out2, Out3), #ast_inf{}}, {Ctx, Trav#trav{var_counter = VarCounter3}}};        
+ast({assign, {'=', _}, {identifier, _, Name}, In1}, {Ctx, Trav}) ->      
+    {{Out2, _}, {_, Trav1}} = var_ast(Name, Ctx#js_ctx{action = set}, Trav),  
+    {Out3, Inf, _} = p_t(In1, Ctx, Trav),  
+    assign_ast('=', Name, Out2, Out3, Inf, Ctx, Trav1);
+ast({assign, {Op, _}, {identifier, _, Name}, In1}, {Ctx, Trav}) ->       
+    {{Out2, _}, _} = var_ast(Name, Ctx, Trav),  
+    {Out3, Inf, Trav1} = p_t(In1, Ctx, Trav),    
+    {{Out4, _}, {_, Trav2}} = var_ast(Name, Ctx#js_ctx{action = set}, Trav1), 
+    assign_ast('=', Name, Out4, erlyjs_operators:ast(assign_to_op(Op), Out2, Out3), Inf, Ctx, Trav2);      
 ast({'if', Cond, Stmt}, {#js_ctx{global = true} = Ctx, Trav}) -> 
-    {Cond2, _, Trav2} = p_t(Cond, Ctx, Trav),
-    {Stmt2, _, Trav3} = p_t(Stmt, Ctx, Trav2#trav{names = add_names(Trav2)}),
+    {Cond2, _, #trav{var_counter = VarCounter}} = p_t(Cond, Ctx, Trav),
+    Trav2 = Trav#trav{var_counter = VarCounter, names = add_names(Trav)},  
+    {Stmt2, _, Trav3} = p_t(Stmt, Ctx, Trav2), 
     ReturnVarsElse = get_vars_init(Trav, Trav3, Ctx),                                        
     Ast = erl_syntax:case_expr(Cond2, [
         erl_syntax:clause([erl_syntax:atom(true)], none, [Stmt2]),
@@ -530,13 +531,13 @@ var_declare(Key, {identifier, _, 'NaN'}, Ctx,  #trav{js_scopes = [_]}=Trav) ->
     Args = [erl_syntax:atom(global_prefix(Key)), erl_syntax:atom('NaN')], 
     Ast = erl_syntax:application(none, erl_syntax:atom(put), Args),
     {{Ast,  #ast_inf{}}, {Ctx, Trav2}};           
-var_declare(Key, Value, Ctx,  #trav{js_scopes = [GlobalScope]}=Trav) ->      
+var_declare(Key, Value, Ctx,  #trav{js_scopes = [GlobalScope]}=Trav) ->       
     Dict = dict:store(Key, global_prefix(Key), GlobalScope#scope.names_dict),
-    Trav2 = Trav#trav{js_scopes=[#scope{names_dict = Dict}]},
-    {ValueAst, Inf, Trav2} = parse_transform(Value, Ctx, Trav2),
+    Trav2 = Trav#trav{js_scopes=[#scope{names_dict = Dict}]},  
+    {ValueAst, Inf, Trav3} = parse_transform(Value, Ctx, Trav2), 
     Args = [erl_syntax:atom(global_prefix(Key)), ValueAst], 
-    Ast = erl_syntax:application(none, erl_syntax:atom(put), Args),  
-    {{append_asts(Inf#ast_inf.global_asts, Ast),  #ast_inf{}}, {Ctx, Trav2}};  
+    Ast = erl_syntax:application(none, erl_syntax:atom(put), Args),   
+    {{append_asts(Inf#ast_inf.global_asts, Ast),  #ast_inf{}}, {Ctx, Trav3}};  
 var_declare(Key, [], Ctx, Trav) ->
     {{AstVariable, _}, {_, Trav2}}  = var_ast(Key, Ctx, Trav),
     Ast = erl_syntax:match_expr(AstVariable, erl_syntax:atom(undefined)),  
@@ -772,7 +773,7 @@ assign_ast(Unknown, _, _, _, _, _, _) ->
     throw({error, lists:concat(["Unknown assignment operator: ", Unknown])}).        
 
 
-maybe_global({{Ast, Inf}, {#js_ctx{global = true} = Ctx, Trav}}) ->
+maybe_global({{Ast, Inf}, {#js_ctx{global = true} = Ctx, Trav}}) ->    
     GlobalAsts = append_asts(Inf#ast_inf.global_asts, Ast),
     {{[], Inf#ast_inf{global_asts = GlobalAsts}}, {Ctx, Trav}};
 maybe_global({AstInf, CtxTrav}) ->    
