@@ -1,6 +1,6 @@
 // Mandatory. Provide here a description of the test case.
 function test_description() {
-    return "Console output (test only verifies execution and not correctness of output)";
+    return "Print (test only verifies execution and not correctness of output)";
 }
 
 // Mandatory. Provide here the arguments the testsuite will use 
@@ -21,8 +21,7 @@ function test_ok() {
 // Testsuite invokes this function with the arguments from test_args()
 // and compares the return value with the expected result from test_result().
 function test() {
-    console.log("hello world");
+    print("hello world");
     
     return true;
 }
-

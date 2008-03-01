@@ -780,9 +780,10 @@ get_mod_func('String', [toLocaleUpperCase], 0) -> {erlyjs_global_string, toLocal
 get_mod_func('String', [toLowerCase], 0) -> {erlyjs_global_string, toLowerCase};   
 get_mod_func('String', [toString], 0) -> {erlyjs_global_string, toString};   
 get_mod_func('String', [toUpperCase], 0) -> {erlyjs_global_string, toUpperCase};   
-get_mod_func('String', [valueOf], 0) -> {erlyjs_global_string, valueOf};   
+get_mod_func('String', [valueOf], 0) -> {erlyjs_global_string, valueOf};    
 %%
-get_mod_func(console, [log], 1)  -> {erlyjs_api_console, f_log}; 
+get_mod_func(load, [], 1)  -> {erlyjs_api, load};
+get_mod_func(print, [], 1)  -> {erlyjs_api, print};
 %%                                                                                               
 get_mod_func(_, _, _) -> err.
    

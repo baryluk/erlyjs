@@ -30,11 +30,13 @@
 %%%
 %%% @since 2008-01-23 by Roberto Saccon
 %%%-------------------------------------------------------------------
--module(erlyjs_api_console).
+-module(erlyjs_api).
 -author('rsaccon@gmail.com').
 
 %% API
--export([f_log/1]).
+-export([  
+    load/1,
+    print/1]).
 
 %%====================================================================
 %% API
@@ -44,7 +46,10 @@
 %% @doc
 %% @end 
 %%--------------------------------------------------------------------
-f_log(Msg) ->
+load(_FileOrURL) ->
+    exit(not_implemented_yet).
+
+print(Msg) ->
     io:format("~p~n",[Msg]),
     ok.
     
