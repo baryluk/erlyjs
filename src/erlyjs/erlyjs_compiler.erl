@@ -721,17 +721,17 @@ call(Name, DotSepNames, Args, Ctx, Trav) ->
     end.    
         
    
-get_mod_func(decodeURI, [], 1) -> {erlyjs_global, decode_uri};
-get_mod_func(decodeURIComponent, [], 1) -> {erlyjs_global, decode_uri_component};
-get_mod_func(encodeURI, [], 1) -> {erlyjs_global, encode_uri};
-get_mod_func(encodeURIComponent, [], 1) -> {erlyjs_global, encode_uri_component};
+get_mod_func(decodeURI, [], 1) -> {erlyjs_global, decodeURI};
+get_mod_func(decodeURIComponent, [], 1) -> {erlyjs_global, decodeURIComponent};
+get_mod_func(encodeURI, [], 1) -> {erlyjs_global, encodeURI};
+get_mod_func(encodeURIComponent, [], 1) -> {erlyjs_global, encodeURIComponent};
 get_mod_func(eval, [], 1) -> {erlyjs_global, eval};
 get_mod_func(eval, [], 2) -> {erlyjs_global, eval};
-get_mod_func(isFinite, [],1) -> {erlyjs_global, is_finite};
-get_mod_func(isNaN, [], 1) -> {erlyjs_global, is_nan};
-get_mod_func(parseInt, [], 1) -> {erlyjs_global, parse_int};
-get_mod_func(parseInt, [], 2) -> {erlyjs_global, parse_int};
-get_mod_func(parseFloat, [], 1) -> {erlyjs_global, parse_float};
+get_mod_func(isFinite, [],1) -> {erlyjs_global, isFinite};
+get_mod_func(isNaN, [], 1) -> {erlyjs_global, isNaN};
+get_mod_func(parseInt, [], 1) -> {erlyjs_global, parseInt};
+get_mod_func(parseInt, [], 2) -> {erlyjs_global, parseInt};
+get_mod_func(parseFloat, [], 1) -> {erlyjs_global, parseFloat};
 %%     
 get_mod_func('Date', [now], 0) -> {erlyjs_global_date, now}; 
 get_mod_func('Date', [parse], 1) -> {erlyjs_global_date, parse};
@@ -753,7 +753,34 @@ get_mod_func('Math', [random], 0) -> {erlyjs_global_math, random};
 get_mod_func('Math', [round], 1) -> {erlyjs_global_math, round};    
 get_mod_func('Math', [sin], 1) -> {erlyjs_global_math, sin};    
 get_mod_func('Math', [sqrt], 1) -> {erlyjs_global_math, sqrt};    
-get_mod_func('Math', [tan], 1) -> {erlyjs_global_math, tan}; 
+get_mod_func('Math', [tan], 1) -> {erlyjs_global_math, tan};  
+%%
+get_mod_func('String', [charAt], 1) -> {erlyjs_global_string, charAt};   
+get_mod_func('String', [charCodeAt], 1) -> {erlyjs_global_string, charCodeAt};  
+get_mod_func('String', [concat], 1) -> {erlyjs_global_string, concat};  
+get_mod_func('String', [indexOf], 1) -> {erlyjs_global_string, indexOf}; 
+get_mod_func('String', [indexOf], 2) -> {erlyjs_global_string, indexOf}; 
+get_mod_func('String', [lastIndexOf], 1) -> {erlyjs_global_string, lastIndexOf}; 
+get_mod_func('String', [lastIndexOf], 2) -> {erlyjs_global_string, lastIndexOf};
+get_mod_func('String', [localeCompare], 1) -> {erlyjs_global_string, localeCompare};
+get_mod_func('String', [match], 1) -> {erlyjs_global_string, match}; 
+get_mod_func('String', [replace], 2) -> {erlyjs_global_string, replace};      
+get_mod_func('String', [search], 1) -> {erlyjs_global_string, search};     
+get_mod_func('String', [slice], 1) -> {erlyjs_global_string, slice};       
+get_mod_func('String', [slice], 2) -> {erlyjs_global_string, slice};      
+get_mod_func('String', [split], 0) -> {erlyjs_global_string, split};    
+get_mod_func('String', [split], 1) -> {erlyjs_global_string, split};   
+get_mod_func('String', [split], 2) -> {erlyjs_global_string, split};   
+get_mod_func('String', [substr], 1) -> {erlyjs_global_string, substr}; 
+get_mod_func('String', [substr], 2) -> {erlyjs_global_string, substr}; 
+get_mod_func('String', [substring], 1) -> {erlyjs_global_string, substring};   
+get_mod_func('String', [substring], 2) -> {erlyjs_global_string, substring}; 
+get_mod_func('String', [toLocaleLowerCase], 0) -> {erlyjs_global_string, toLocaleLowerCase};   
+get_mod_func('String', [toLocaleUpperCase], 0) -> {erlyjs_global_string, toLocaleUpperCase};   
+get_mod_func('String', [toLowerCase], 0) -> {erlyjs_global_string, toLowerCase};   
+get_mod_func('String', [toString], 0) -> {erlyjs_global_string, toString};   
+get_mod_func('String', [toUpperCase], 0) -> {erlyjs_global_string, toUpperCase};   
+get_mod_func('String', [valueOf], 0) -> {erlyjs_global_string, valueOf};   
 %%
 get_mod_func(console, [log], 1)  -> {erlyjs_api_console, f_log}; 
 %%                                                                                               

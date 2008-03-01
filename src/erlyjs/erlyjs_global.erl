@@ -72,17 +72,17 @@
 
 %% API
 -export([
-    decode_uri/1,
-    decode_uri_component/1,
-    encode_uri/1,
-    encode_uri_component/1,
+    decodeURI/1,
+    decodeURIComponent/1,
+    encodeURI/1,
+    encodeURIComponent/1,
     eval/1,
     eval/2,
-    is_finite/1,
-    is_nan/1,
-    parse_int/1,
-    parse_int/2,
-    parse_float/1]).    
+    isFinite/1,
+    isNaN/1,
+    parseInt/1,
+    parseInt/2,
+    parseFloat/1]).    
     
 
 %%====================================================================
@@ -94,19 +94,19 @@
 %% @end 
 %%--------------------------------------------------------------------
 
-decode_uri(_Str) ->
+decodeURI(_Str) ->
     exit(not_implemented_yet).
 
 
-decode_uri_component(_Str) ->
+decodeURIComponent(_Str) ->
     exit(not_implemented_yet).
 
 
-encode_uri(Str) ->
+encodeURI(Str) ->
     encode(Str, uri). 
 
 
-encode_uri_component(Str) ->
+encodeURIComponent(Str) ->
     encode(Str, uri_component).
 
 
@@ -139,8 +139,8 @@ eval(Str, _Object) when is_list(Str) ->
     
         
 %% TODO: check for positive infinity or negative infinity
-is_finite(X) ->
-    case is_nan(X) of
+isFinite(X) ->
+    case isNaN(X) of
         true ->
             false;
         _ ->
@@ -150,29 +150,29 @@ is_finite(X) ->
     
     
 %% TODO: check for positive infinity or negative infinity    
-is_nan('NaN') ->
+isNaN('NaN') ->
     true;
-is_nan(X) when is_number(X) ->
+isNaN(X) when is_number(X) ->
     false;
-is_nan(X) ->
-    case is_nan(parse_int2(X)) of
+isNaN(X) ->
+    case isNaN(parseInt2(X)) of
         true ->
-            is_nan(parse_float2(X));
+            isNaN(parseFloat2(X));
         _ ->
             false
     end.
 
             
-parse_int(Str) -> 
-    parse_int2(Str).
+parseInt(Str) -> 
+    parseInt2(Str).
 
 
-parse_int(_Str, _Radix) ->
+parseInt(_Str, _Radix) ->
     exit(not_implemented_yet).
         
 
-parse_float(Str) ->
-    parse_float2(Str).
+parseFloat(Str) ->
+    parseFloat2(Str).
 
     
 %%====================================================================
@@ -180,7 +180,7 @@ parse_float(Str) ->
 %%====================================================================
 
 %% TODO: a lot, this is just the most simple case
-parse_int2(Str) ->
+parseInt2(Str) ->
     try list_to_integer(Str) of
         Val -> Val
     catch
@@ -189,7 +189,7 @@ parse_int2(Str) ->
         
             
 %% TODO: a lot, this is just the most simple case    
-parse_float2(X) ->
+parseFloat2(X) ->
     try list_to_float(X) of
         Val -> Val
     catch
