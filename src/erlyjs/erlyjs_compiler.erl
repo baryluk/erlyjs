@@ -95,7 +95,7 @@ compile(File, Module, Options) ->
 parse(Data) when is_binary(Data) ->
     parse(binary_to_list(Data));
 parse(Data) ->
-    case erlyjs_lexer:string(Data) of
+    case erlyjs_scan:string(Data) of
         {ok, Tokens, _} ->
             erlyjs_parser:parse(Tokens);
         Err ->

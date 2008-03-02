@@ -1,9 +1,9 @@
 %%%-------------------------------------------------------------------
-%%% File:      erlyjs_lexer.xrl
+%%% File:      erlyjs_scan.xrl
 %%% @author    Roberto Saccon <rsaccon@gmail.com> [http://rsaccon.com]
 %%% @copyright 2007 Roberto Saccon
 %%% @doc  
-%%% ErlyJS Leexer
+%%% ErlyJS Scanner
 %%% @end  
 %%%
 %%% The MIT License
@@ -117,7 +117,44 @@ Rules.
 <= :                  {token,{'<=',TokenLine}}.
 >= :                  {token,{'>=',TokenLine}}.
 
-Erlang code.
+Erlang code.  
+
+%%%-------------------------------------------------------------------
+%%% File:      erlyjs_scan.xrl
+%%% @author    Roberto Saccon <rsaccon@gmail.com> [http://rsaccon.com]
+%%% @copyright 2007 Roberto Saccon
+%%% @doc  
+%%% ErlyJS Scanner (auto-generated with leex)
+%%% @end  
+%%%
+%%% The MIT License
+%%%
+%%% Copyright (c) 2007 Roberto Saccon
+%%%
+%%% Permission is hereby granted, free of charge, to any person obtaining a copy
+%%% of this software and associated documentation files (the "Software"), to deal
+%%% in the Software without restriction, including without limitation the rights
+%%% to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+%%% copies of the Software, and to permit persons to whom the Software is
+%%% furnished to do so, subject to the following conditions:
+%%%
+%%% The above copyright notice and this permission notice shall be included in
+%%% all copies or substantial portions of the Software.
+%%%
+%%% THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+%%% IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+%%% FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+%%% AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+%%% LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+%%% OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+%%% THE SOFTWARE.
+%%%
+%%% Acknowledgements
+%%% ================
+%%% special thanks to Denis Loutrein for initial code contribution
+%%%
+%%% @since 2007-12-23 by Roberto Saccon
+%%%-------------------------------------------------------------------
 
 -export([
     build_integer/2, 
@@ -203,4 +240,3 @@ reserved_word('double') -> true;
 reserved_word('import') -> true;
 reserved_word('public') -> true;
 reserved_word(_) -> false.
-

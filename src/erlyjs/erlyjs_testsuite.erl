@@ -53,7 +53,7 @@ run_group(Group) ->
          
     
 run(Name) ->
-    case recreate_lexer_parser() of
+    case recreate_scanner_parser() of
         ok ->
             case make:all([load]) of
                 up_to_date ->
@@ -77,7 +77,7 @@ run(Name) ->
 %%====================================================================
   
 run2(Dir) ->    
-    case recreate_lexer_parser() of
+    case recreate_scanner_parser() of
         ok ->                                               
             case fold_tests("^[^(SKIP_)].+\.js$", false, Dir) of
                 {N, []}->
@@ -91,9 +91,9 @@ run2(Dir) ->
     end.        
     
     
-recreate_lexer_parser() ->
+recreate_scanner_parser() ->
     crypto:start(),
-    case recreate(erlyjs:lexer_src(),  lexer) of
+    case recreate(erlyjs:scanner_src(),  scanner) of
         ok ->
             recreate(erlyjs:parser_src(), parser);
         Err ->

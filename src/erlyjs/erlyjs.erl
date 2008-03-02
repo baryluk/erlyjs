@@ -39,9 +39,9 @@
     compile/2, 
     compile/3, 
     shell/0,
-    create_lexer/0, 
+    create_scanner/0, 
     create_parser/0, 
-    lexer_src/0, 
+    scanner_src/0, 
     parser_src/0,
     dump_src/1]).
 
@@ -69,8 +69,8 @@ shell() ->
 %% Creates the leex-based ErlyJS lexer
 %% @end 
 %%--------------------------------------------------------------------
-create_lexer() ->
-    create_lexer("src/erlyjs/erlyjs_lexer", "ebin").
+create_scanner() ->
+    create_scanner("src/erlyjs/erlyjs_scan", "ebin").
 
 %%--------------------------------------------------------------------
 %% @spec () -> any()
@@ -81,8 +81,8 @@ create_lexer() ->
 create_parser() ->
     create_parser("src/erlyjs/erlyjs_parser", "ebin").
      
-lexer_src() ->
-     filename:join(src_erlyjs_dir(), "erlyjs_lexer.xrl").
+scanner_src() ->
+     filename:join(src_erlyjs_dir(), "erlyjs_scan.xrl").
 
 parser_src() ->
      filename:join(src_erlyjs_dir(), "erlyjs_parser.yrl"). 
@@ -107,12 +107,12 @@ src_erlyjs_dir() ->
      filename:join([filename:dirname(filename:dirname(Ebin)), "src", "erlyjs"]).
 
 
-create_lexer(Path, Outdir) ->
+create_scanner(Path, Outdir) ->
     case leex:file(Path) of
         ok ->
-            compile2(Path, Outdir, "Lexer");
+            compile2(Path, Outdir, "Scanner");
         _ ->
-            {error, "leexer generation failed"}
+            {error, "scanner generation failed"}
     end.
 
     
